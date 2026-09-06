@@ -1,0 +1,6 @@
+add_library(rkmon_core STATIC logger.cpp service_manager.cpp)
+add_library(rkmon::core ALIAS rkmon_core)
+target_include_directories(rkmon_core PUBLIC "${PROJECT_SOURCE_DIR}/include")
+target_compile_features(rkmon_core PUBLIC cxx_std_20)
+target_compile_options(rkmon_core PRIVATE -Wall -Wextra -Wpedantic)
+target_link_libraries(rkmon_core PUBLIC Threads::Threads spdlog::spdlog)
