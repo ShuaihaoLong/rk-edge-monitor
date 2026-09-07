@@ -9,7 +9,19 @@ bash script/build.sh --target host --jobs 4 --test
 bash script/build.sh --target rk3588 --jobs 4
 ```
 
-主程序目前只是初始化/退出验证入口，尚未注册摄像头或 GLib 事件循环，启动后会正常退出。现有 GStreamer smoke 示例仍使用 `script/smoke-build.sh` 独立构建。
+主程序由 Application 管理生命周期，启动后阻塞等待控制消息，收到停止请求后退出。尚未注册摄像头或 GLib 事件循环。GStreamer smoke 示例保留在 `examples/`，使用 `script/smoke-build.sh` 独立构建。
+
+## Application 与对象所有权
+
+`rkmon::app::Application` 位于 `include/app` 和 `src/app`，是程序的组装入口。它拥有控制邮箱、`ServiceManager` 和主 logger 句柄。`main.cpp` 只创建 Application 并调用 `run()`。
+
+跨模块对象保持为 Application 的私有成员。具体服务将在 `setup_services()` 中创建，Application 可把私有成员的引用作为构造参数传给服务；服务无需访问 Application 本身。当前尚未定义 `Frame` 和 `VideoService`，因此没有提前创建空的视频帧队列。
+
+Application 的关闭顺序为：停止并销毁所有服务、关闭控制邮箱、释放自己的 logger 句柄、关闭日志模块。这保证服务线程不会访问已经销毁的通信对象或日志对象。Application 只允许运行一次；控制邮箱关闭后 `request_stop()` 返回 false。
+
+`run()` 在调用线程中使用邮箱的 `receive()` 持续等待消息，没有消息时休眠。其他普通线程调用 `request_stop()` 会直接关闭邮箱并唤醒等待，不依赖消息队列有空位。该接口不是信号安全接口，当前尚未接入 SIGINT/SIGTERM 处理；后续应由信号适配器安全地转交退出请求。接入 GLib 主循环时再将等待方式换为事件循环唤醒适配。
+
+`src/` 只保留正式生命周期和业务组装入口。自动启动/停止验证、错误注入均在 `tests/`。Application 测试覆盖持续等待、其他线程请求停止、启动前停止和初始化失败。
 
 `.clangd` 改为读取主工程 `build/rk3588/compile_commands.json`。主机和 ARM64 使用不同构建目录，不能混用缓存。第三方 spdlog 使用现有子模块提交，不修改或升级源码；静态编译并使用随附 fmt。
 
@@ -55,9 +67,20 @@ ServiceManager 仅由主控制线程调用，按依赖顺序 add，顺序启动�
 ## 验证范围
 
 CTest 使用无额外下载依赖的轻量断言程序：
+
 - queue：溢出/关闭/丢旧策略、移动所有权、阻塞线程唤醒和多生产者多消费者无丢失重复。
 - mailbox：满队列拒绝、关闭通知、锁外唤醒回调及通知异常计数。
 - service：依赖顺序、两阶段停止、启动失败/异常回滚、重复启停、析构回收真实线程。
 - logger：初始化错误、多线程写入、文件轮转、级别过滤及退出刷新。
 
 ARM64 构建生成同一测试程序，但不在 WSL 上自动运行。尚不包含硬件、GStreamer 主循环、设备重连或长时间稳定性测试。
+
+## 本次实测结果（2026-09-07）
+
+- 主机 GCC 11.4.0 构建成功，CTest 的 queue/mailbox/service/logger 四组测试全部通过。
+- ARM64 GCC 11.4.0 构建主程序和测试程序成功；file 确认两个产物均为 AArch64 ELF。
+- 主机主程序启动、输出日志并正常退出。
+- clangd 22.1.6 正确读取主工程 ARM64 编译数据库；app/logger/tests 检查为 0 errors。
+- service_manager 的完整 clangd 检查触发 ExtractFunction 重构动作限制（包含 continue），未报告源码语法错误；使用 `--tweaks=` 排除重构动作检查后为 0 errors。未为此禁用 VSCode 的重构功能。
+- build.sh 语法、帮助和禁止主机直接执行 ARM64 测试的参数校验通过。
+- 尚未在开发板执行本次中间层产物，也未进行硬件或长稳验证。

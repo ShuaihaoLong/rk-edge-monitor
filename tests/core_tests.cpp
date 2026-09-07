@@ -2,6 +2,7 @@
 #include "core/mailbox.hpp"
 #include "core/service_manager.hpp"
 #include "core/logger.hpp"
+#include "app/application.hpp"
 #include <atomic>
 #include <chrono>
 #include <filesystem>
@@ -9,7 +10,6 @@
 #include <future>
 #include <iostream>
 #include <iterator>
-#include <numeric>
 #include <stdexcept>
 #include <thread>
 #include <vector>
@@ -236,14 +236,51 @@ void logger_tests() {
     std::filesystem::remove_all(path);
 }
 
+void application_tests() {
+    rkmon::app::Application::Options options;
+    options.log.console = false;
+    options.log.file_path =
+        (std::filesystem::temp_directory_path() /
+         ("rkmon-application-test-" + std::to_string(getpid()) + ".log"))
+            .string();
+    {
+        rkmon::app::Application application(options);
+        auto running = std::async(std::launch::async, [&] { return application.run(); });
+        const auto state_before_stop = running.wait_for(100ms);
+        REQUIRE(application.request_stop());
+        REQUIRE(running.wait_for(1s) == std::future_status::ready);
+        REQUIRE(running.get() == 0);
+        REQUIRE(state_before_stop == std::future_status::timeout);
+        REQUIRE(application.run() == 2);
+        REQUIRE(!application.request_stop());
+    }
+    {
+        // 启动前停止同样不能挂住事件循环。
+        rkmon::app::Application application(options);
+        REQUIRE(application.request_stop());
+        REQUIRE(application.run() == 0);
+    }
+    {
+        // 初始化失败必须返回错误，并且关闭 Application 的通信入口。
+        auto invalid_options = options;
+        invalid_options.log.file_path.clear();
+        rkmon::app::Application application(invalid_options);
+        REQUIRE(application.run() == 1);
+        REQUIRE(!application.request_stop());
+    }
+    REQUIRE(std::filesystem::exists(options.log.file_path));
+    std::filesystem::remove(options.log.file_path);
+}
+
 int main(int argc, char** argv) {
     try {
-        if (argc != 2) throw std::invalid_argument("expected queue/mailbox/service/logger");
+        if (argc != 2) throw std::invalid_argument("expected queue/mailbox/service/logger/application");
         const std::string suite = argv[1];
         if (suite == "queue") queue_tests();
         else if (suite == "mailbox") mailbox_tests();
         else if (suite == "service") service_tests();
         else if (suite == "logger") logger_tests();
+        else if (suite == "application") application_tests();
         else throw std::invalid_argument("unknown suite");
         std::cout << "PASS: " << suite << '\n';
         return 0;

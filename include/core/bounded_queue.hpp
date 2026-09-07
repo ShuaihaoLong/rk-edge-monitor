@@ -90,7 +90,7 @@ public:
 private:
     std::optional<T> take(std::unique_lock<std::mutex>& lock) {
         if (queue_.empty()) return std::nullopt;
-        std::optional<T> value(std::in_place, std::move(queue_.front()));
+        std::optional<T> value(std::move(queue_.front()));
         queue_.pop_front();
         lock.unlock();
         not_full_.notify_one();
