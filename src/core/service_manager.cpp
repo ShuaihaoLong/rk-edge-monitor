@@ -23,7 +23,9 @@ bool ServiceManager::start_all() {
         attempted_ = i + 1;
         try {
             if (services_[i]->start()) continue;
-            last_error_ = std::string(services_[i]->name()) + ": start returned false";
+            const auto snapshot = services_[i]->health();
+            last_error_ = std::string(services_[i]->name()) + ": " +
+                (snapshot.detail.empty() ? "start returned false" : snapshot.detail);
         } catch (const std::exception& error) {
             // 先停止所有已尝试模块，异常文本构造失败也不留下运行中的线程。
             stop_all();

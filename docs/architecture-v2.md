@@ -1,6 +1,6 @@
 # RK3588 边缘智能监控终端：V2 架构草案
 
-状态：建议方案，尚未上板验证。依据用户粘贴的重构建议和硬件说明制定。
+状态：完整产品规划草案。当前已实现功能与最新框架检查以 [框架检查记录](framework-review.md) 为准；本文后续阶段尚未实现。
 
 用户后续调整：优先完成 USB 摄像头视频功能，先准备 WSL2 → ARM64 交叉编译环境；串口阶段后移。摄像头 USB ID 为 0bda:d576（Realtek USB Camera），实际格式仍需板端查询。开发环境以 [交叉编译说明](cross-compile.md) 为准，取代下文最初的板端原生编译建议；原阶段表作为完整功能规划保留，执行顺序改为工程基础 → 视频 → 后续 AI/通信。
 
@@ -27,7 +27,7 @@
 | 语言 | C++17；线程采用 std::thread、显式停止和 join，不使用 C++20 才提供的 std::jthread |
 | 构建 | CMake + Unix Makefiles，使用 GNU Make 编译，按 target 管理依赖；host 和 rk3588 两组构建配置 |
 | 调试 | GDB；主机上对纯逻辑执行 ASan/UBSan，必要时单独执行 TSan |
-| 日志/配置 | spdlog + nlohmann/json；配置集中校验，依赖版本固定 |
+| 日志/配置 | 当前使用 spdlog + INI；配置集中校验，依赖版本固定 |
 | 单元测试 | GoogleTest；协议、队列退出、请求超时为重点 |
 | 视频 | GStreamer 编排；优先验证厂商 MPP 插件，插件不可用时再决定直接封装 MPP |
 | AI | 一个 YOLOv8n 检测模型；板端 C++ RKNN Runtime；RGA 在验证后用于预处理 |

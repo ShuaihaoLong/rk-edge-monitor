@@ -5,8 +5,12 @@
 #include "core/mailbox.hpp"
 #include "core/service_manager.hpp"
 
+#include <atomic>
 #include <cstddef>
 #include <memory>
+#include <functional>
+#include <string>
+#include <vector>
 
 namespace rkmon::app {
 
@@ -17,8 +21,12 @@ public:
         std::size_t control_mailbox_capacity{64};
     };
 
+    using FaultReporter = std::function<void(std::string, std::string)>;
+    using ServiceList = std::vector<std::unique_ptr<core::IService>>;
+    using ServiceFactory = std::function<ServiceList(FaultReporter, std::shared_ptr<spdlog::logger>)>;
+
     Application();
-    explicit Application(Options options);
+    explicit Application(Options options, ServiceFactory factory = {});
     ~Application();
 
     Application(const Application&) = delete;
@@ -37,14 +45,19 @@ private:
     void shutdown() noexcept;
 
     Options options_;
+    ServiceFactory factory_;
 
     // 邮箱的生命周期必须覆盖所有借用它的服务。
     core::Mailbox<ControlEvent> control_mailbox_;
     std::unique_ptr<core::ServiceManager> services_;
     std::shared_ptr<spdlog::logger> logger_;
 
+    std::atomic<bool> service_failed_{false};
     bool run_called_{false};
     bool logger_initialized_{false};
 };
+
+struct RuntimeConfig;
+Application::ServiceFactory make_service_factory(RuntimeConfig config);
 
 } // namespace rkmon::app

@@ -1,4 +1,6 @@
 #include "app/application.hpp"
+#include "app/config.hpp"
+#include "camera/video_capture_service.hpp"
 
 #include <exception>
 #include <iostream>
@@ -7,10 +9,24 @@
 
 namespace rkmon::app {
 
+Application::ServiceFactory make_service_factory(RuntimeConfig config) {
+    return [config = std::move(config)](Application::FaultReporter report,
+                                       std::shared_ptr<spdlog::logger> logger) {
+        Application::ServiceList services;
+        if (config.camera) {
+            services.push_back(std::make_unique<camera::VideoCaptureService>(
+                config.camera->capture, config.camera->queue_capacity,
+                [report](const std::string& reason) { report("video_capture", reason); }, logger));
+        }
+        return services;
+    };
+}
+
 Application::Application() : Application(Options{}) {}
 
-Application::Application(Options options)
+Application::Application(Options options, ServiceFactory factory)
     : options_(std::move(options)),
+      factory_(std::move(factory)),
       control_mailbox_(options_.control_mailbox_capacity),
       services_(std::make_unique<core::ServiceManager>()) {}
 
@@ -28,11 +44,17 @@ int Application::run() {
         logger_initialized_ = true;
         logger_ = log::get();
 
+        if (control_mailbox_.closed()) {
+            shutdown();
+            return service_failed_ ? 1 : 0;
+        }
         setup_services();
         if (!services_->start_all()) {
             logger_->error("[app] 服务启动失败：{}", services_->last_error());
             result = 1;
         } else {
+            logger_->info("[app] services started");
+            logger_->flush();
             process_control_events();
         }
     } catch (const std::exception& error) {
@@ -44,7 +66,7 @@ int Application::run() {
         result = 1;
     }
     shutdown();
-    return result;
+    return service_failed_ ? 1 : result;
 }
 
 bool Application::request_stop() {
@@ -54,6 +76,18 @@ bool Application::request_stop() {
 }
 
 void Application::setup_services() {
+    if (!factory_) return;
+    auto services = factory_([this](std::string service, std::string reason) {
+        // 致命故障的退出不依赖日志成功或邮箱剩余容量。
+        service_failed_ = true;
+        try {
+            if (control_mailbox_.try_post(ServiceFault{service, reason}) == core::PushResult::accepted)
+                return;
+            logger_->error("[{}] {}", service, reason);
+        } catch (...) {}
+        request_stop();
+    }, logger_);
+    for (auto& service : services) services_->add(std::move(service));
 }
 
 void Application::process_control_events() {
@@ -64,7 +98,9 @@ void Application::process_control_events() {
                 if constexpr (std::is_same_v<Event, ShutdownRequested>) {
                     request_stop();
                 } else if constexpr (std::is_same_v<Event, ServiceFault>) {
+                    service_failed_ = true;
                     logger_->error("[{}] {}", value.service, value.reason);
+                    request_stop();
                 }
             },
             *event);
