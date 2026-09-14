@@ -1,6 +1,6 @@
 #pragma once
-#include "ai/interfaces/object_detector.hpp"
-#include "ai/transport/result_writer.hpp"
+#include "ai/detector.hpp"
+#include "ai/result_writer.hpp"
 #include "core/service.hpp"
 #include "core/bounded_queue.hpp"
 #include <spdlog/logger.h>

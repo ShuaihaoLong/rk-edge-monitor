@@ -1,5 +1,5 @@
 #include "rknn_detector.hpp"
-#include "ai/preprocess/nv12_letterbox.hpp"
+#include "ai/nv12_letterbox.hpp"
 #include "yolov8.h"
 #include <algorithm>
 #include <fstream>

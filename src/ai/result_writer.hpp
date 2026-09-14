@@ -1,5 +1,5 @@
 #pragma once
-#include "ai/interfaces/object_detector.hpp"
+#include "ai/detector.hpp"
 namespace rkmon::ai {
 // 单写线程的只读 JSON 快照；原子替换避免 Nginx 读到半份结果。
 class ResultWriter {

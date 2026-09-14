@@ -3,17 +3,19 @@ if(CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64")
     set(_rknn_default ON)
 endif()
 option(RKMON_WITH_RKNN "Enable RK3588 NPU inference" ${_rknn_default})
-add_library(rkmon_ai STATIC services/inference_service.cpp transport/result_writer.cpp
-    preprocess/nv12_letterbox.cpp factory/detector_factory.cpp)
+add_library(rkmon_ai STATIC inference_service.cpp result_writer.cpp
+    nv12_letterbox.cpp factory.cpp)
 add_library(rkmon::ai ALIAS rkmon_ai)
-target_include_directories(rkmon_ai PUBLIC "${PROJECT_SOURCE_DIR}/src")
+target_include_directories(rkmon_ai
+    PUBLIC "${PROJECT_SOURCE_DIR}/include"
+    PRIVATE "${PROJECT_SOURCE_DIR}/src")
 target_link_libraries(rkmon_ai PUBLIC rkmon::core)
 target_compile_options(rkmon_ai PRIVATE -Wall -Wextra -Wpedantic)
 if(RKMON_WITH_RKNN)
     find_library(RKNN_RUNTIME rknnrt REQUIRED)
     add_library(rkmon_yolov8_postprocess STATIC "${PROJECT_SOURCE_DIR}/third_party/rknn_yolov8/postprocess.cc")
     target_include_directories(rkmon_yolov8_postprocess PUBLIC "${PROJECT_SOURCE_DIR}/third_party/rknn_yolov8")
-    target_sources(rkmon_ai PRIVATE rknn/rknn_detector.cpp)
+    target_sources(rkmon_ai PRIVATE detector.cpp)
     target_compile_definitions(rkmon_ai PRIVATE RKMON_WITH_RKNN)
     target_link_libraries(rkmon_ai PRIVATE rkmon_yolov8_postprocess "${RKNN_RUNTIME}")
 endif()

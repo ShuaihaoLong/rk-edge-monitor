@@ -4,10 +4,12 @@ if(CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64")
 endif()
 option(RKMON_WITH_GSTREAMER "Build Rockchip GStreamer hardware decoder and publisher" ${_gst_default})
 
-add_library(rkmon_video STATIC services/video_process_service.cpp factory/video_decoder_factory.cpp
-    services/video_stream_service.cpp factory/video_publisher_factory.cpp)
+add_library(rkmon_video STATIC services/video_process_service.cpp factory.cpp
+    services/video_stream_service.cpp)
 add_library(rkmon::video ALIAS rkmon_video)
-target_include_directories(rkmon_video PUBLIC "${PROJECT_SOURCE_DIR}/src")
+target_include_directories(rkmon_video
+    PUBLIC "${PROJECT_SOURCE_DIR}/include"
+    PRIVATE "${PROJECT_SOURCE_DIR}/src")
 target_compile_options(rkmon_video PRIVATE -Wall -Wextra -Wpedantic)
 target_link_libraries(rkmon_video PUBLIC rkmon::core)
 if(RKMON_WITH_GSTREAMER)
@@ -15,7 +17,8 @@ if(RKMON_WITH_GSTREAMER)
     set(PKG_CONFIG_USE_CMAKE_PREFIX_PATH FALSE)
     pkg_check_modules(GST REQUIRED IMPORTED_TARGET GLOBAL
         gstreamer-1.0>=1.20 gstreamer-app-1.0>=1.20 gstreamer-video-1.0>=1.20)
-    target_sources(rkmon_video PRIVATE gstreamer/gst_video_pipeline.cpp gstreamer/gst_rtsp_publisher.cpp)
+    target_sources(rkmon_video PRIVATE gstreamer/gst_video_pipeline.cpp
+        gstreamer/gst_rtsp_publisher.cpp)
     target_compile_definitions(rkmon_video PRIVATE RKMON_WITH_GSTREAMER)
     target_link_libraries(rkmon_video PRIVATE PkgConfig::GST)
 endif()

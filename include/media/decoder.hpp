@@ -1,6 +1,6 @@
 #pragma once
 
-#include "camera/videoFrame.hpp"
+#include "media/frame.hpp"
 #include <memory>
 #include <optional>
 

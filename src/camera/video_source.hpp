@@ -1,6 +1,6 @@
 #pragma once
 
-#include "videoFrame.hpp"
+#include "media/frame.hpp"
 
 #include <string>
 

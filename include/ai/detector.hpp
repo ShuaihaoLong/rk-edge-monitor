@@ -1,14 +1,11 @@
 #pragma once
-#include "camera/videoFrame.hpp"
+#include "ai/config.hpp"
+#include "media/frame.hpp"
 #include <memory>
 #include <string>
 #include <vector>
 
 namespace rkmon::ai {
-struct InferenceConfig {
-    std::string model_path, labels_path, result_path;
-    unsigned fps{10};
-};
 struct Detection {
     int class_id{};
     std::string label;

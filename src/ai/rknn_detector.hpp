@@ -1,5 +1,5 @@
 #pragma once
-#include "ai/interfaces/object_detector.hpp"
+#include "ai/detector.hpp"
 namespace rkmon::ai {
 class RknnDetector final : public IObjectDetector {
 public:

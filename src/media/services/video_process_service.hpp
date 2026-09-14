@@ -1,6 +1,6 @@
 #pragma once
 
-#include "video/interfaces/video_decoder.hpp"
+#include "media/decoder.hpp"
 #include "core/bounded_queue.hpp"
 #include "core/service.hpp"
 #include <spdlog/logger.h>

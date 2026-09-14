@@ -1,6 +1,6 @@
-#include "ai/interfaces/object_detector.hpp"
+#include "ai/detector.hpp"
 #ifdef RKMON_WITH_RKNN
-#include "ai/rknn/rknn_detector.hpp"
+#include "ai/rknn_detector.hpp"
 #endif
 #include <stdexcept>
 namespace rkmon::ai {

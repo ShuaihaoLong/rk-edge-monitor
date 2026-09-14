@@ -1,4 +1,4 @@
-#include "video/gstreamer/gst_video_pipeline.hpp"
+#include "media/gstreamer/gst_video_pipeline.hpp"
 
 #include <gst/app/gstappsrc.h>
 #include <gst/app/gstappsink.h>

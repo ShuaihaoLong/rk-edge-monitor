@@ -2,9 +2,9 @@
 
 #include "app/application.hpp"
 #include "camera/video_source.hpp"
-#include "video/interfaces/video_decoder.hpp"
-#include "video/interfaces/video_publisher.hpp"
-#include "ai/interfaces/object_detector.hpp"
+#include "media/decoder.hpp"
+#include "media/publisher.hpp"
+#include "ai/detector.hpp"
 #include <filesystem>
 #include <optional>
 

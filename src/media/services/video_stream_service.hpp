@@ -1,5 +1,5 @@
 #pragma once
-#include "video/interfaces/video_publisher.hpp"
+#include "media/publisher.hpp"
 #include "core/bounded_queue.hpp"
 #include "core/service.hpp"
 #include <spdlog/logger.h>

@@ -1,5 +1,5 @@
-#include "ai/services/inference_service.hpp"
-#include "ai/preprocess/nv12_letterbox.hpp"
+#include "ai/inference_service.hpp"
+#include "ai/nv12_letterbox.hpp"
 #include <filesystem>
 #include <fstream>
 #include <iostream>

@@ -117,7 +117,7 @@ ProtocolClient 维护有容量限制的 pending 请求，以单调时钟判断�
 app/                    # 组装、入口、主循环
 src/core/               # 有界队列、生命周期、公共错误类型
 src/device/             # 串口、解码器、请求管理、设备状态
-src/video/              # GStreamer、帧所有权、RTSP
+src/media/              # GStreamer、帧所有权、RTSP
 src/ai/                 # 预处理、RKNN、检测后处理
 src/observability/      # 日志、统计、健康快照
 include/edge/           # 模块公开接口
