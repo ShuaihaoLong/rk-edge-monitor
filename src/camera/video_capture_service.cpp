@@ -129,9 +129,11 @@ CaptureStats VideoCaptureService::stats() const {
 }
 
 void VideoCaptureService::run() noexcept {
+    std::uint64_t source_generation = 0;
     while (!stop_) {
         try {
             source_->open();
+            ++source_generation;
             online_ = true;
             {
                 std::lock_guard lock(health_mutex_);
@@ -166,6 +168,7 @@ void VideoCaptureService::run() noexcept {
                 }
                 consecutive_timeouts = 0;
                 ++frames_;
+                result.frame.source_generation = source_generation;
                 // 消费者跟不上时丢弃最旧帧，保持队列有界并优先提供近期画面。
                 if (queue_->try_push(std::move(result.frame), core::OverflowPolicy::drop_oldest)
                     == core::PushResult::closed) {

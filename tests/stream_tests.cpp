@@ -17,19 +17,21 @@ template<class F> void wait(F ready) {
 class Publisher final : public video::IVideoPublisher {
 public:
     std::atomic<unsigned> writes{0}, checks{0};
+    std::atomic<unsigned> opens{0}, closes{0};
     std::atomic<bool> broken{false}, stopped{false};
     bool fail_open{false};
     void open() override {
         if (fail_open) throw std::runtime_error("open failed");
+        ++opens;
         stopped = false;
     }
-    void write(const camera::VideoFrame&) override { ++writes; }
+    void write(const camera::VideoFrame&) override { check_health(); ++writes; }
     void check_health() override {
         ++checks;
         if (broken) throw std::runtime_error("connection lost");
     }
     void request_stop() noexcept override { stopped = true; }
-    void close() noexcept override {}
+    void close() noexcept override { ++closes; }
     std::uint64_t encoded_frames() const noexcept override { return writes; }
 };
 }
@@ -52,16 +54,24 @@ int main() {
         queue = std::make_shared<Service::Queue>(2);
         check(service.start(), "restart failed");
         old_queue->close();
-        queue->push(camera::VideoFrame{});
+        camera::VideoFrame input;
+        input.source_generation = 1;
+        queue->push(input);
         wait([&] { return view->writes == 2; });
+        const auto opens_before_generation_change = view->opens.load();
+        input.source_generation = 2;
+        queue->push(input);
+        wait([&] { return view->writes == 3; });
+        check(view->opens > opens_before_generation_change, "camera session did not restart publisher");
         // 网络故障降级并在后台重连，不能终止进程或关闭输入队列。
         view->broken = true;
+        queue->push(input);
         wait([&] { return service.health().state == core::ServiceState::degraded; });
         check(service.health().detail == "connection lost", "fault reason lost");
         view->broken = false;
         std::this_thread::sleep_for(std::chrono::milliseconds(2100));
-        queue->push(camera::VideoFrame{});
-        wait([&] { return view->writes == 3; });
+        queue->push(input);
+        wait([&] { return view->writes == 4; });
         check(faults == 0 && !queue->closed(), "recoverable stream fault propagated");
         service.request_stop(); service.join();
         queue->close();

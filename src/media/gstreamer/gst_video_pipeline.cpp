@@ -192,6 +192,7 @@ void GstVideoPipeline::close() noexcept {
     auto& s = *impl_;
     if (s.pipeline) {
         gst_element_set_state(s.pipeline, GST_STATE_NULL);
+        gst_element_get_state(s.pipeline, nullptr, nullptr, 2 * GST_SECOND);
     }
     if (s.bus) {
         gst_object_unref(s.bus);

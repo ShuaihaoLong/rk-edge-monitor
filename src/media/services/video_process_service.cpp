@@ -38,7 +38,6 @@ bool VideoProcessService::start() {
         if (!input_ || input_->closed()) {
             throw std::runtime_error("capture queue is not available");
         }
-        decoder_->open();
         state_ = core::ServiceState::running;
         worker_ = std::thread(&VideoProcessService::run, this);
         return true;
@@ -105,41 +104,81 @@ void VideoProcessService::fail(std::string reason) noexcept {
 }
 
 void VideoProcessService::run() noexcept {
-    try {
-        while (!stop_) {
-            auto input = input_->pop_for(std::chrono::milliseconds(20));
-            if (stop_) {
-                break;
+    std::uint64_t generation = 0;
+    while (!stop_) {
+        try {
+            decoder_->open();
+            {
+                std::lock_guard lock(mutex_);
+                error_.clear();
             }
-            if (!input) {
-                if (input_->closed()) {
-                    throw std::runtime_error("capture queue closed unexpectedly");
+            state_ = core::ServiceState::running;
+            generation = 0;
+            // 摄像头离线期间输入队列保持打开；线程在此等待，不结束下游队列。
+            while (!stop_) {
+                auto input = input_->pop_for(std::chrono::milliseconds(20));
+                if (stop_) {
+                    break;
                 }
-                continue;
+                if (!input) {
+                    if (input_->closed()) {
+                        throw std::runtime_error("capture queue closed unexpectedly");
+                    }
+                    continue;
+                }
+                if (generation != 0 && input->source_generation != generation) {
+                    // JPEG 解析器和硬件解码器保存流状态，新 USB 会话必须整体重建。
+                    decoder_->close();
+                    if (stop_) break;
+                    decoder_->open();
+                    if (stop_) {
+                        decoder_->request_stop();
+                        break;
+                    }
+                    if (logger_) logger_->info("[video_decode] camera session changed; decoder restarted");
+                }
+                generation = input->source_generation;
+                auto frame = decoder_->decode(*input);
+                if (stop_) {
+                    break;
+                }
+                if (!frame) {
+                    throw std::runtime_error("decoder stopped unexpectedly");
+                }
+                if (frames_ == 0 && logger_) {
+                    logger_->info("[video_decode] first NV12 frame: {}x{}, stride={}, bytes={}",
+                                  frame->width, frame->height, frame->stride, frame->size);
+                }
+                ++frames_;
+                // 分发只读帧引用；订阅回调必须非阻塞，下游各自维护有界队列。
+                if (sink_) sink_(*frame);
+                // 下游慢时丢旧的原始图像，既不占住硬件输出，也不让内存无限增长。
+                if (output_->try_push(std::move(*frame), core::OverflowPolicy::drop_oldest)
+                    == core::PushResult::closed) break;
             }
-            auto frame = decoder_->decode(*input);
-            if (stop_) {
-                break;
+        } catch (const std::exception& error) {
+            if (stop_) break;
+            {
+                std::lock_guard lock(mutex_);
+                error_ = error.what();
             }
-            if (!frame) {
-                throw std::runtime_error("decoder stopped unexpectedly");
+            state_ = core::ServiceState::degraded;
+            try {
+                if (logger_) logger_->warn("[video_decode] {}; retry in 2s", error.what());
+            } catch (...) {}
+        } catch (...) {
+            if (stop_) break;
+            {
+                std::lock_guard lock(mutex_);
+                error_ = "unknown video processing failure";
             }
-            if (frames_ == 0 && logger_) {
-                logger_->info("[video_decode] first NV12 frame: {}x{}, stride={}, bytes={}",
-                              frame->width, frame->height, frame->stride, frame->size);
-            }
-            ++frames_;
-            // 分发只读帧引用；订阅回调必须非阻塞，下游各自维护有界队列。
-            if (sink_) sink_(*frame);
-            // 下游慢时丢旧的原始图像，既不占住硬件输出，也不让内存无限增长。
-            if (output_->try_push(std::move(*frame), core::OverflowPolicy::drop_oldest)
-                == core::PushResult::closed) break;
+            state_ = core::ServiceState::degraded;
         }
-    } catch (const std::exception& error) {
-        fail(error.what());
-    } catch (...) {
-        fail("unknown video processing failure");
+        decoder_->close();
+        for (unsigned i = 0; i < 100 && !stop_; ++i)
+            std::this_thread::sleep_for(std::chrono::milliseconds(20));
     }
+    decoder_->close();
     output_->close();
     if (state_ != core::ServiceState::failed) {
         state_ = core::ServiceState::stopped;

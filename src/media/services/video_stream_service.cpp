@@ -66,6 +66,7 @@ void VideoStreamService::fail(std::string reason) noexcept {
 }
 void VideoStreamService::run() noexcept {
     std::uint64_t submitted = 0;
+    std::uint64_t generation = 0;
     while (!stop_) {
         try {
             publisher_->open();
@@ -74,14 +75,26 @@ void VideoStreamService::run() noexcept {
                 error_.clear();
             }
             state_ = core::ServiceState::running;
+            generation = 0;
             while (!stop_) {
                 auto frame = input_->pop_for(std::chrono::milliseconds(20));
                 if (stop_) break;
-                publisher_->check_health();
                 if (!frame) {
                     if (input_->closed()) throw std::runtime_error("decoded frame queue closed unexpectedly");
                     continue;
                 }
+                if (generation != 0 && frame->source_generation != generation) {
+                    // 新摄像头会话不能沿用旧编码器的参考帧和 RTSP 时间线。
+                    publisher_->close();
+                    if (stop_) break;
+                    publisher_->open();
+                    if (stop_) {
+                        publisher_->request_stop();
+                        break;
+                    }
+                    if (logger_) logger_->info("[video_stream] camera session changed; publisher restarted");
+                }
+                generation = frame->source_generation;
                 publisher_->write(*frame);
                 ++submitted;
             }

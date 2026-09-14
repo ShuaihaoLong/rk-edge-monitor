@@ -10,6 +10,8 @@ namespace rkmon::camera {
 enum class PixelFormat { RGB888, BGR888, NV12, YUYV, MJPG };
 
 struct VideoFrame {
+    // 每次摄像头成功重新打开后递增，下游据此重建有状态的编解码管线。
+    std::uint64_t source_generation{0};
     std::uint64_t sequence{0};
     int width{0};
     int height{0};

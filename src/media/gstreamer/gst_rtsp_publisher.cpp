@@ -178,7 +178,11 @@ std::uint64_t GstRtspPublisher::encoded_frames() const noexcept { return impl_->
 void GstRtspPublisher::close() noexcept {
     auto& s = *impl_;
     // 工作线程已退出；NULL 状态结束流线程后再销毁含 pad probe 的管线。
-    if (s.pipeline) gst_element_set_state(s.pipeline, GST_STATE_NULL);
+    if (s.pipeline) {
+        gst_element_set_state(s.pipeline, GST_STATE_NULL);
+        // 等硬件编码线程完全退出后再释放对象，避免紧接着 open 时占用旧 MPP 上下文。
+        gst_element_get_state(s.pipeline, nullptr, nullptr, 2 * GST_SECOND);
+    }
     if (s.bus) gst_object_unref(s.bus);
     if (s.source) gst_object_unref(s.source);
     if (s.pipeline) gst_object_unref(s.pipeline);

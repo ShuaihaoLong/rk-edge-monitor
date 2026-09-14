@@ -36,7 +36,7 @@
       lastTime = video.currentTime;
       lastProgress = performance.now();
       status.hidden = true;
-    } else if (performance.now() - lastProgress > 15000) {
+    } else if (performance.now() - lastProgress > 5000) {
       connect();
     }
   }, 1000);
