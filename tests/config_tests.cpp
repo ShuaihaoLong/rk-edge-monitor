@@ -47,8 +47,16 @@ int main() {
         auto ai_config = fixture.read("[camera]\nenabled=true\ndevice=/dev/video0\n[video]\nenabled=true\n[ai]\nenabled=true\nmodel=../models/test.rknn\nfps=8\n");
         check(ai_config.ai && ai_config.ai->fps == 8 &&
               ai_config.ai->model_path == (fixture.dir / "../models/test.rknn").lexically_normal().string(), "AI config wrong");
+        auto mqtt_config = fixture.read("[mqtt]\nenabled=true\ndevice_id=center_1\nrole=center\nbroker_host=127.0.0.1\npublish_interval_ms=500\n");
+        check(mqtt_config.mqtt && mqtt_config.mqtt->device_id == "center_1" &&
+              mqtt_config.mqtt->role == "center" && mqtt_config.mqtt->publish_interval_ms == 500, "MQTT config wrong");
         for (const std::string text : {
             "[ai]\nenabled=true\n", "[ai]\nfps=0\n", "[ai]\nfps=61\n",
+            "[mqtt]\nenabled=true\n", "[mqtt]\nenabled=true\ndevice_id=bad/id\n",
+            "[mqtt]\nenabled=true\ndevice_id=ok\nrole=server\n",
+            "[mqtt]\nenabled=true\ndevice_id=ok\ntopic_prefix=/bad\n",
+            "[mqtt]\nenabled=true\ndevice_id=ok\ntopic_prefix=bad/+\n",
+            "[mqtt]\nenabled=true\ndevice_id=ok\npublish_interval_ms=2000\nkeepalive_seconds=2\n",
             "[stream]\nenabled=true\n", "[stream]\nbitrate=0\n", "[stream]\ngop=0\n",
             "[stream]\ntimeout_ms=0\n", "[camera]\nenabled=true\ndevice=/dev/video0\n[video]\nenabled=true\n[stream]\nenabled=true\nurl=http://localhost\n",
             "[video]\nenabled=true\n", "[video]\ntimeout_ms=0\n",

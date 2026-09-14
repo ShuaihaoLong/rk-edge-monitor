@@ -1,7 +1,7 @@
 [Unit]
 Description=RK3588 camera hardware decode and encode service
-After=network-online.target mediamtx.service
-Wants=network-online.target mediamtx.service
+After=network-online.target mosquitto.service mediamtx.service
+Wants=network-online.target mosquitto.service mediamtx.service
 StartLimitIntervalSec=0
 
 [Service]

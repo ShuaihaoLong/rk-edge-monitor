@@ -1,6 +1,8 @@
 #include "app/config.hpp"
 
 #include <charconv>
+#include <algorithm>
+#include <cctype>
 #include <fstream>
 #include <map>
 #include <set>
@@ -34,7 +36,8 @@ public:
             if (line.front() == '[') {
                 if (line.back() != ']') error(number, "malformed section");
                 section = trim(line.substr(1, line.size() - 2));
-                if (section != "app" && section != "logging" && section != "camera" && section != "video" && section != "stream" && section != "ai")
+                if (section != "app" && section != "logging" && section != "camera" && section != "video" &&
+                    section != "stream" && section != "ai" && section != "mqtt")
                     error(number, "unknown section: " + section);
                 if (!sections.insert(section).second) error(number, "duplicate section: " + section);
                 continue;
@@ -120,6 +123,7 @@ RuntimeConfig load_config(const std::filesystem::path& path) {
     capture.buffer_count = ini.integer("camera.buffer_count", 4, 2, 64);
     capture.poll_timeout_ms = static_cast<int>(ini.integer("camera.poll_timeout_ms", 1000, 1, 60000));
     capture.max_consecutive_timeouts = ini.integer("camera.max_consecutive_timeouts", 5, 1, 1000);
+    capture.reconnect_interval_ms = ini.integer("camera.reconnect_interval_ms", 2000, 100, 60000);
     camera.queue_capacity = ini.integer("camera.queue_capacity", 4, 1, 64);
     const auto format = ini.take("camera.format", "MJPG");
     if (format == "MJPG") capture.format = camera::PixelFormat::MJPG;
@@ -162,6 +166,31 @@ RuntimeConfig load_config(const std::filesystem::path& path) {
     if (ai_enabled) {
         if (!config.video) throw std::runtime_error(absolute.string() + ": AI requires video.enabled=true");
         config.ai = ai;
+    }
+    const bool mqtt_enabled = ini.boolean("mqtt.enabled", false);
+    mqtt::Config mqtt;
+    mqtt.broker_host = ini.take("mqtt.broker_host", "127.0.0.1");
+    mqtt.broker_port = ini.integer("mqtt.broker_port", 1883, 1, 65535);
+    mqtt.device_id = ini.take("mqtt.device_id", "");
+    mqtt.role = ini.take("mqtt.role", "edge");
+    mqtt.topic_prefix = ini.take("mqtt.topic_prefix", "rkmon/devices");
+    mqtt.publish_interval_ms = ini.integer("mqtt.publish_interval_ms", 2000, 250, 60000);
+    mqtt.keepalive_seconds = ini.integer("mqtt.keepalive_seconds", 10, 2, 65535);
+    if (mqtt_enabled) {
+        const auto valid_id = !mqtt.device_id.empty() && mqtt.device_id.size() <= 64 &&
+            std::all_of(mqtt.device_id.begin(), mqtt.device_id.end(), [](unsigned char character) {
+                return std::isalnum(character) || character == '-' || character == '_';
+            });
+        if (!valid_id) throw std::runtime_error(absolute.string() + ": mqtt.device_id must use letters, digits, '-' or '_'");
+        if (mqtt.broker_host.empty() || mqtt.broker_host.find_first_of(" \t\r\n") != std::string::npos)
+            throw std::runtime_error(absolute.string() + ": invalid mqtt.broker_host");
+        if (mqtt.role != "center" && mqtt.role != "edge")
+            throw std::runtime_error(absolute.string() + ": mqtt.role must be center or edge");
+        if (mqtt.topic_prefix != "rkmon/devices")
+            throw std::runtime_error(absolute.string() + ": mqtt.topic_prefix must be rkmon/devices");
+        if (mqtt.publish_interval_ms >= mqtt.keepalive_seconds * 1000)
+            throw std::runtime_error(absolute.string() + ": MQTT publish interval must be shorter than keepalive");
+        config.mqtt = mqtt;
     }
     ini.finish();
     return config;

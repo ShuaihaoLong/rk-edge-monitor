@@ -3,7 +3,7 @@
 # 示例：bash script/package-monitor.sh
 #       bash script/package-monitor.sh --archive /路径/mediamtx_v1.21.0_linux_arm64.tar.gz
 # 参数：--archive 指定 MediaMTX 安装包；无环境变量；--help 显示说明。
-# 前提：先运行 build.sh --target rk3588 和 prepare-ai-probe.py，准备官方 v1.21.0 ARM64 包及 sha256sum/tar。
+# 前提：先运行 build.sh、prepare-ai-probe.py 和 prepare-mqtt-deps.sh，准备 ARM64 依赖及 sha256sum/tar。
 # 输出：build/deploy/rkmon-deploy.tar.gz；默认从 .local/downloads/ 读取安装包。
 # 副作用：覆盖上次部署包，不下载文件，不连接板卡，不修改源码和板端服务。
 set -euo pipefail
@@ -25,7 +25,7 @@ actual=$(sha256sum -- "$archive")
 staging=$(mktemp -d)
 trap 'rm -rf -- "$staging"' EXIT
 payload=$staging/rkmon-deploy
-mkdir -p "$payload/"{bin,config/systemd,script,models,licenses}
+mkdir -p "$payload/"{bin,config/systemd,script,models,licenses,packages}
 # 模型与配套标签随程序一起更新，拒绝未知版本的模型。
 model=$project_dir/.local/ai-stage4/yolov8n.rknn
 model_digest=$(sha256sum -- "$model")
@@ -33,9 +33,16 @@ model_digest=$(sha256sum -- "$model")
 cp "$model" "$payload/models/"
 cp "$project_dir/.local/ai-stage4/zoo/examples/yolov8/model/coco_80_labels_list.txt" "$payload/models/"
 cp "$project_dir/third_party/rknn_yolov8/LICENSE" "$payload/licenses/RKNN-Model-Zoo-LICENSE"
+package_dir=$project_dir/.local/downloads/mosquitto-arm64
+bash "$script_dir/prepare-mqtt-deps.sh" --offline
+cp "$package_dir/"*.deb "$payload/packages/"
+(
+    cd "$payload/packages"
+    sha256sum ./*.deb > SHA256SUMS
+)
 tar -xzf "$archive" -C "$payload/bin" mediamtx
 cp "$project_dir/build/rk3588/src/app/rkmon" "$payload/bin/"
-cp "$project_dir/config/"{rkmon.ini,mediamtx.yml,nginx-monitor.conf} "$payload/config/"
+cp "$project_dir/config/"{rkmon.ini,mediamtx.yml,nginx-monitor.conf,mosquitto-rkmon.conf} "$payload/config/"
 cp "$project_dir/config/systemd/"{rkmon,mediamtx}.service "$payload/config/systemd/"
 cp -R "$project_dir/web" "$payload/"
 cp "$script_dir/install-monitor.sh" "$payload/script/"

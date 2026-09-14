@@ -220,5 +220,59 @@ src/media/
 
 已用公开预转换的 RK3588 YOLOv8n INT8 模型完成 C API 单图验证；模型无需在 PC 重新转换即可运行。
 板端 Runtime 2.1.0、驱动 0.9.6，35 次检测检查通过。独立探针位于 `examples/rknn-smoke/`，
-尚未接入实时视频或修改正式监控部署。依赖准备使用 `python3 script/prepare-ai-probe.py`。
+该探针用于独立单图验证；实时视频接入见下节。依赖准备使用 `python3 script/prepare-ai-probe.py`。
 模型来源、固定版本、复现命令和性能边界见 [AI 能力验证说明](examples/rknn-smoke/README.md)。
+
+
+### 实时识别与网页显示
+
+代码遵循 `b1b3e50` 的目录结构：公共数据与检测接口在 `include/ai`、`include/media`，
+媒体管线在 `src/media`，检测器、预处理、推理服务和结果快照实现在 `src/ai`。
+
+解码后的只读 NV12 帧分别进入编码队列和 AI 队列；AI 队列容量为 1，忙时保留最新帧。
+`[ai]` 控制启用、模型/标签/快照路径和推理频率，默认 10 fps。AI 异常独立重试，不触发整个监控程序退出。
+当前预处理为 CPU 双线性缩放、NV12 转 RGB、等比例补边，按 BT.601 limited range 解释当前相机数据。
+输入颜色范围或相机型号变化后需重新验证；RGA 预处理与零拷贝仍是后续优化项。
+
+结果以原图坐标输出到 `/run/rkmon/detections.json`，原子替换文件，Nginx 通过只读 `/api/detections` 提供访问。
+运行目录由 systemd 创建，避免频繁快照写入持久存储；手动启动时需要可写的结果目录。
+网页每 250 ms 获取最新快照，左侧最多保留 80 条识别日志；刷新页面重新开始记录，不作为持久审计日志。
+视频右上角“显示识别框”使用当前浏览器的本地开关，不停止 NPU 推理、不影响其他浏览器。
+
+识别框由 Canvas 绘制，按视频留黑边和原始尺寸映射坐标，无需 OpenCV，也不将框烧入 H.264。
+关闭框后日志仍更新；结果过期、数据连接断开或视频冻结后清框。采用最新检测结果叠加，不保证与 WebRTC 逐帧同步，快速运动时可能有框滞后。
+
+模型和标签已加入现有 `deploy.sh → package-monitor.sh → install-monitor.sh` 部署链路。
+2026-09-14 完成验证：最新目录层级下 13 项主机 CTest 和 ARM64 构建通过；板端 1080p 视频产生实时结果，
+实测快照中预处理到后处理约 26–60 ms（抽样，非完整性能基准）。浏览器验证了真实日志更新、检测框开/关、
+刷新后开关状态保留，以及模拟检测 API 断线时清框且视频继续播放。测试框由浏览器临时注入，不改变板端推理数据。
+
+### MQTT 设备状态
+
+中心节点在板端运行 Mosquitto。局域网设备使用 MQTT `1883` 端口发布状态；网页通过 Nginx 的同源
+`/mqtt` WebSocket 入口订阅，Mosquitto 的 `9001` 端口只监听回环地址。当前配置适用于可信局域网，
+若跨网段或接入公网，应增加账号、ACL 与 TLS。
+
+每台设备配置唯一的 `[mqtt].device_id` 和 `role=center|edge`，并向
+`rkmon/devices/<device_id>/status` 发布 retained QoS 0 JSON。网页订阅
+`rkmon/devices/+/status`，按设备动态生成状态卡。消息字段如下：
+
+```json
+{
+  "schema": 1,
+  "device_id": "rk3588-center",
+  "role": "center",
+  "ip": "192.168.100.11",
+  "online": true,
+  "camera_online": true,
+  "heartbeat_interval_ms": 2000,
+  "cpu_usage_percent": 12.3,
+  "cpu_temperature_c": 48.6,
+  "updated_at_ms": 1789387200000
+}
+```
+
+发布端连接时注册 retained 离线遗嘱，正常退出也主动发布离线状态。网页同时以至少 8 秒、或三倍心跳周期未更新判定兜底，
+避免异常网络下长期展示旧的在线消息。摄像头服务在设备不存在、采集错误或连续超时时保持进程运行，
+将 `camera_online` 置为 `false` 并按 `reconnect_interval_ms` 后台重试；下游队列在重连期间保持有效，
+摄像头恢复后视频、推流和识别链路可继续工作。

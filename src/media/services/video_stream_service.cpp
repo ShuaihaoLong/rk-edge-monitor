@@ -22,21 +22,19 @@ bool VideoStreamService::start() {
         std::lock_guard lock(mutex_);
         error_.clear();
     }
+    input_ = provider_();
+    if (!input_ || input_->closed()) {
+        fail("decoded frame queue is not available");
+        return false;
+    }
+    state_ = core::ServiceState::running;
     try {
-        input_ = provider_();
-        if (!input_ || input_->closed()) throw std::runtime_error("decoded frame queue is not available");
-        publisher_->open();
-        state_ = core::ServiceState::running;
         worker_ = std::thread(&VideoStreamService::run, this);
         return true;
-    } catch (const std::exception& error) {
-        publisher_->close();
-        fail(error.what());
     } catch (...) {
-        publisher_->close();
-        fail("unknown stream startup failure");
+        state_ = core::ServiceState::failed;
+        throw;
     }
-    return false;
 }
 void VideoStreamService::request_stop() noexcept {
     stop_ = true;
@@ -68,25 +66,49 @@ void VideoStreamService::fail(std::string reason) noexcept {
 }
 void VideoStreamService::run() noexcept {
     std::uint64_t submitted = 0;
-    try {
-        while (!stop_) {
-            auto frame = input_->pop_for(std::chrono::milliseconds(20));
-            if (stop_) break;
-            // 即使输入暂时没有帧，也需要处理异步 RTSP 错误。
-            publisher_->check_health();
-            if (!frame) {
-                if (input_->closed()) throw std::runtime_error("decoded frame queue closed unexpectedly");
-                continue;
+    while (!stop_) {
+        try {
+            publisher_->open();
+            {
+                std::lock_guard lock(mutex_);
+                error_.clear();
             }
-            publisher_->write(*frame);
-            ++submitted;
+            state_ = core::ServiceState::running;
+            while (!stop_) {
+                auto frame = input_->pop_for(std::chrono::milliseconds(20));
+                if (stop_) break;
+                publisher_->check_health();
+                if (!frame) {
+                    if (input_->closed()) throw std::runtime_error("decoded frame queue closed unexpectedly");
+                    continue;
+                }
+                publisher_->write(*frame);
+                ++submitted;
+            }
+        } catch (const std::exception& error) {
+            if (stop_) break;
+            {
+                std::lock_guard lock(mutex_);
+                error_ = error.what();
+            }
+            state_ = core::ServiceState::degraded;
+            try {
+                if (logger_) logger_->warn("[video_stream] {}; retry in 2s", error.what());
+            } catch (...) {}
+        } catch (...) {
+            if (stop_) break;
+            {
+                std::lock_guard lock(mutex_);
+                error_ = "unknown stream failure";
+            }
+            state_ = core::ServiceState::degraded;
         }
-    } catch (const std::exception& error) {
-        if (!stop_) fail(error.what());
-    } catch (...) {
-        if (!stop_) fail("unknown stream worker failure");
+        publisher_->close();
+        for (unsigned i = 0; i < 100 && !stop_; ++i)
+            std::this_thread::sleep_for(std::chrono::milliseconds(20));
     }
-    if (state_ != core::ServiceState::failed) state_ = core::ServiceState::stopped;
+    publisher_->close();
+    state_ = core::ServiceState::stopped;
     try {
         if (logger_) logger_->info("[video_stream] submitted={}, encoded={}", submitted, publisher_->encoded_frames());
     } catch (...) {}

@@ -6,16 +6,25 @@
   <title>设备监控</title>
   <link rel="stylesheet" href="style.css">
   <script defer src="vendor/reader.js"></script>
+  <script defer src="vendor/mqtt.min.js"></script>
   <script defer src="player.js"></script>
   <script defer src="detections.js"></script>
+  <script defer src="device-status.js"></script>
 </head>
 <body>
   <main>
-    <aside aria-label="识别日志">
-      <header><h1>识别日志</h1><span id="ai-state">连接中</span></header>
+    <aside>
+      <section aria-label="设备状态">
+        <header><h1>设备状态</h1><span id="mqtt-state">连接中</span></header>
+        <div id="device-list"></div>
+        <p id="device-empty" class="hint">等待设备上线…</p>
+      </section>
+      <section class="recognition" aria-label="识别日志">
+        <header><h1>识别日志</h1><span id="ai-state">连接中</span></header>
       <p class="hint">显示最近的检测结果</p>
       <ol id="detection-log" aria-label="最近识别记录"></ol>
       <p id="log-empty">等待识别结果…</p>
+      </section>
     </aside>
     <section id="viewport" aria-label="实时监控">
       <video id="monitor" autoplay muted playsinline aria-label="摄像头实时画面"></video>

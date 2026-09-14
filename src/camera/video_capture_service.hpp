@@ -7,7 +7,6 @@
 #include <spdlog/logger.h>
 
 #include <atomic>
-#include <functional>
 #include <memory>
 #include <mutex>
 #include <thread>
@@ -27,14 +26,12 @@ struct CaptureStats {
 class VideoCaptureService final : public core::IService {
 public:
     using Queue = core::BoundedQueue<VideoFrame>;
-    using FaultHandler = std::function<void(const std::string&)>;
-
     explicit VideoCaptureService(CaptureConfig config, std::size_t queue_capacity = 4,
-                                 FaultHandler on_fault = {},
                                  std::shared_ptr<spdlog::logger> logger = {});
     VideoCaptureService(std::unique_ptr<IVideoSource> source, std::size_t queue_capacity = 4,
-                        unsigned max_consecutive_timeouts = 5, FaultHandler on_fault = {},
-                        std::shared_ptr<spdlog::logger> logger = {});
+                        unsigned max_consecutive_timeouts = 5,
+                        std::shared_ptr<spdlog::logger> logger = {},
+                        unsigned reconnect_interval_ms = 2000);
     ~VideoCaptureService() override;
 
     bool start() override;
@@ -52,24 +49,27 @@ public:
         return queue_;
     }
     CaptureStats stats() const;
+    // true 仅表示设备当前已打开且最近一次读取未发生致命错误。
+    [[nodiscard]] bool online() const noexcept {
+        return online_.load();
+    }
     NegotiatedFormat negotiated_format() const {
         return source_->negotiated_format();
     }
 
 private:
     void run() noexcept;
-    void fail(std::string reason) noexcept;
-
     std::unique_ptr<IVideoSource> source_;
     std::size_t queue_capacity_;
     unsigned max_timeouts_;
-    FaultHandler on_fault_;
+    unsigned reconnect_interval_ms_;
     std::shared_ptr<spdlog::logger> logger_;
     bool stats_pending_{false};
     std::shared_ptr<Queue> queue_;
 
     std::thread worker_;
     std::atomic<bool> stop_{false};
+    std::atomic<bool> online_{false};
     std::atomic<core::ServiceState> state_{core::ServiceState::stopped};
 
     mutable std::mutex health_mutex_;

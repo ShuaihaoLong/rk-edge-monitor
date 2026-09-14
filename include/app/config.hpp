@@ -5,6 +5,7 @@
 #include "media/decoder.hpp"
 #include "media/publisher.hpp"
 #include "ai/detector.hpp"
+#include "mqtt/config.hpp"
 #include <filesystem>
 #include <optional>
 
@@ -19,6 +20,7 @@ struct RuntimeConfig {
     std::optional<video::DecodeConfig> video;
     std::optional<video::StreamConfig> stream;
     std::optional<ai::InferenceConfig> ai;
+    std::optional<mqtt::Config> mqtt;
 };
 // 完整解析、校验后返回；相对路径以配置文件所在目录为基准。
 RuntimeConfig load_config(const std::filesystem::path& path);

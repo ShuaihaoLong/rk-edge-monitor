@@ -54,22 +54,23 @@ int main() {
         old_queue->close();
         queue->push(camera::VideoFrame{});
         wait([&] { return view->writes == 2; });
-        // 没有新帧时也必须发现服务器异步故障。
+        // 网络故障降级并在后台重连，不能终止进程或关闭输入队列。
         view->broken = true;
-        wait([&] { return faults == 1; });
-        service.join();
-        check(service.health().state == core::ServiceState::failed, "fault state lost");
+        wait([&] { return service.health().state == core::ServiceState::degraded; });
         check(service.health().detail == "connection lost", "fault reason lost");
         view->broken = false;
-        check(service.start(), "restart after fault failed");
+        std::this_thread::sleep_for(std::chrono::milliseconds(2100));
+        queue->push(camera::VideoFrame{});
+        wait([&] { return view->writes == 3; });
+        check(faults == 0 && !queue->closed(), "recoverable stream fault propagated");
+        service.request_stop(); service.join();
         queue->close();
-        wait([&] { return faults == 2; });
-        service.join();
         check(!service.start(), "closed upstream accepted");
         queue = std::make_shared<Service::Queue>(2);
         view->fail_open = true;
-        check(!service.start(), "publisher open failure ignored");
-        service.join();
+        check(service.start(), "publisher outage prevented service startup");
+        wait([&] { return service.health().state == core::ServiceState::degraded; });
+        service.request_stop(); service.join();
         std::cout << "stream service tests passed\n";
     } catch (const std::exception& error) {
         std::cerr << error.what() << '\n';

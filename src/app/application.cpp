@@ -5,6 +5,7 @@
 #include "media/services/video_stream_service.hpp"
 
 #include "ai/inference_service.hpp"
+#include "mqtt/device_status_service.hpp"
 
 #include <exception>
 #include <iostream>
@@ -17,11 +18,19 @@ Application::ServiceFactory make_service_factory(RuntimeConfig config) {
     return [config = std::move(config)](Application::FaultReporter report,
                                        std::shared_ptr<spdlog::logger> logger) {
         Application::ServiceList services;
+        std::unique_ptr<camera::VideoCaptureService> capture;
+        camera::VideoCaptureService* capture_view = nullptr;
         if (config.camera) {
-            auto capture = std::make_unique<camera::VideoCaptureService>(
-                config.camera->capture, config.camera->queue_capacity,
-                [report](const std::string& reason) { report("video_capture", reason); }, logger);
-            auto* capture_view = capture.get();
+            capture = std::make_unique<camera::VideoCaptureService>(
+                config.camera->capture, config.camera->queue_capacity, logger);
+            capture_view = capture.get();
+        }
+        // 状态服务最先启动、最后停止，即使摄像头缺失也能持续发布设备在线状态。
+        if (config.mqtt) {
+            services.push_back(std::make_unique<mqtt::DeviceStatusService>(
+                *config.mqtt, [capture_view] { return capture_view && capture_view->online(); }, logger));
+        }
+        if (capture) {
             services.push_back(std::move(capture));
             if (config.video) {
                 // 上游先启动；provider 在解码 start 时才读取当次采集队列。

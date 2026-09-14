@@ -21,6 +21,7 @@ public:
     enum class Mode { frames, blocked, timeout, error, open_failure };
     explicit FakeSource(Mode mode) : mode_(mode) {}
     void open() override {
+        ++opens;
         if (mode_ == Mode::open_failure) throw std::runtime_error("open failed");
         std::lock_guard lock(mutex_);
         stopped_ = false;
@@ -45,9 +46,10 @@ public:
     }
     void close() noexcept override { ++closed; }
     NegotiatedFormat negotiated_format() const override { return {}; }
-    unsigned closed{0};
+    void mode(Mode value) { mode_ = value; }
+    std::atomic<unsigned> closed{0}, opens{0};
 private:
-    Mode mode_;
+    std::atomic<Mode> mode_;
     std::mutex mutex_;
     std::condition_variable cv_;
     bool stopped_{false};
@@ -78,20 +80,20 @@ void blocked_stop() {
 }
 void failures() {
     for (auto mode : {FakeSource::Mode::timeout, FakeSource::Mode::error, FakeSource::Mode::open_failure}) {
-        std::atomic<unsigned> faults{0};
         auto source = std::make_unique<FakeSource>(mode);
         auto* raw = source.get();
-        VideoCaptureService service(std::move(source), 2, 3,
-                                    [&](const std::string&) { ++faults; });
-        const bool started = service.start();
-        check(started == (mode != FakeSource::Mode::open_failure), "wrong start result");
-        eventually([&] { return faults == 1; });
+        VideoCaptureService service(std::move(source), 2, 3, {}, 20);
+        check(service.start(), "offline camera prevented service startup");
+        eventually([&] { return service.health().state == rkmon::core::ServiceState::degraded; });
+        check(!service.online(), "failed camera reported online");
+        check(!service.output()->closed(), "offline camera closed downstream queue");
+        raw->mode(FakeSource::Mode::frames);
+        eventually([&] { return service.online() && service.stats().frames > 0; });
+        service.request_stop();
         service.join();
         check(raw->closed > 0, "failure did not close source");
-        check(service.health().state == rkmon::core::ServiceState::failed, "failure state lost");
-        check(!service.health().detail.empty(), "missing diagnostic");
-        check(service.output()->closed(), "failure left consumer blocked");
-        if (mode == FakeSource::Mode::timeout) check(service.stats().timeouts == 3, "timeout threshold wrong");
+        check(service.output()->closed(), "normal stop left consumer blocked");
+        if (mode == FakeSource::Mode::timeout) check(service.stats().timeouts >= 3, "timeout threshold wrong");
     }
     CaptureConfig config;
     config.device = "/dev/rkmon-nonexistent-camera";

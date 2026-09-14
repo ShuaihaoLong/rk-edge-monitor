@@ -39,8 +39,22 @@ with tempfile.TemporaryDirectory(prefix="rkmon startup ") as temporary:
     for arguments in (["--help"], ["--target", "bad"], ["--config"], ["--binary", "missing"]):
         result = subprocess.run(["bash", str(launcher)] + arguments, cwd=root, capture_output=True, timeout=3)
         assert result.returncode == (0 if arguments == ["--help"] else (1 if arguments[0] == "--binary" else 2))
+    # 摄像头缺失是可恢复状态，进程保持运行并等待设备出现。
+    ini.write_text("[camera]\nenabled=true\ndevice=/dev/rkmon-missing-device\nreconnect_interval_ms=100\n")
+    process = subprocess.Popen([str(binary), "--config", str(ini)], cwd=root,
+                               stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+    try:
+        time.sleep(0.3)
+        assert process.poll() is None, "missing camera stopped application"
+        process.send_signal(signal.SIGTERM)
+        output, _ = process.communicate(timeout=3)
+        assert process.returncode == 0, output
+        assert "offline" in output, output
+    finally:
+        if process.poll() is None:
+            process.kill()
+            process.wait()
     for content, expected in (
-        ("[camera]\nenabled=true\ndevice=/dev/rkmon-missing-device\n", "No such file"),
         ("[camera]\nenabled=false\nfps=oops\n", "camera.fps"),
         ("[camera]\nenabld=true\n", "camera.enabld"),
     ):
