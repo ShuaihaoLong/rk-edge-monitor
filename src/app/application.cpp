@@ -4,6 +4,8 @@
 #include "video/services/video_process_service.hpp"
 #include "video/services/video_stream_service.hpp"
 
+#include "ai/services/inference_service.hpp"
+
 #include <exception>
 #include <iostream>
 #include <type_traits>
@@ -24,12 +26,20 @@ Application::ServiceFactory make_service_factory(RuntimeConfig config) {
             if (config.video) {
                 // 上游先启动；provider 在解码 start 时才读取当次采集队列。
                 // ServiceManager 逆序停止/等待，借用的采集服务覆盖解码服务的运行期。
+                auto ai_queue = config.ai ? std::make_shared<ai::InferenceService::Queue>(1) : nullptr;
                 auto decode = std::make_unique<video::VideoProcessService>(
                     video::make_hardware_decoder(*config.video),
                     [capture_view] { return capture_view->output(); }, *config.video,
-                    [report](const std::string& reason) { report("video_decode", reason); }, logger);
+                    [report](const std::string& reason) { report("video_decode", reason); }, logger,
+                    [ai_queue](const camera::VideoFrame& frame) {
+                        if (ai_queue) ai_queue->try_push(frame, core::OverflowPolicy::drop_oldest);
+                    });
                 auto* decode_view = decode.get();
                 services.push_back(std::move(decode));
+                if (config.ai) {
+                    services.push_back(std::make_unique<ai::InferenceService>(
+                        ai::make_detector(*config.ai), ai_queue, *config.ai, logger));
+                }
                 if (config.stream) {
                     services.push_back(std::make_unique<video::VideoStreamService>(
                         video::make_hardware_publisher(*config.stream),

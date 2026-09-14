@@ -3,7 +3,7 @@
 # 示例：bash script/deploy.sh；bash script/deploy.sh --host elf@192.168.100.11 --skip-build
 # 参数：--host SSH 目标（默认 elf@192.168.100.11）；--jobs 构建并行数（默认 4）；
 #       --archive MediaMTX 包路径；--skip-build 复用已有 ARM64 程序；--dry-run 仅显示计划；--help。
-# 前提：PC 有 Bash、SSH 密钥登录、交叉编译工具及 MediaMTX 安装包；板端有 Nginx、MPP/GStreamer、sudo。
+# 前提：PC 有 Bash、SSH 密钥登录、交叉编译工具、MediaMTX 包及 prepare-ai-probe.py 准备的模型；板端有 Nginx、MPP/GStreamer、RKNN、sudo。
 # 输出：build/deploy/rkmon-deploy.tar.gz；板端 /opt/rkmon 和 /opt/rkmon-backup.*；无环境变量。
 # 副作用：短暂停流，覆盖程序、网页和项目配置，启用/重启服务；sudo 可能在终端询问密码，不保存密码。
 set -euo pipefail

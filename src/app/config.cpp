@@ -34,7 +34,7 @@ public:
             if (line.front() == '[') {
                 if (line.back() != ']') error(number, "malformed section");
                 section = trim(line.substr(1, line.size() - 2));
-                if (section != "app" && section != "logging" && section != "camera" && section != "video" && section != "stream")
+                if (section != "app" && section != "logging" && section != "camera" && section != "video" && section != "stream" && section != "ai")
                     error(number, "unknown section: " + section);
                 if (!sections.insert(section).second) error(number, "duplicate section: " + section);
                 continue;
@@ -152,6 +152,16 @@ RuntimeConfig load_config(const std::filesystem::path& path) {
         }
         stream.fps = config.camera->capture.fps;
         config.stream = stream;
+    }
+    const bool ai_enabled = ini.boolean("ai.enabled", false);
+    ai::InferenceConfig ai;
+    ai.model_path = resolve(ini.take("ai.model", "../models/yolov8n.rknn"));
+    ai.labels_path = resolve(ini.take("ai.labels", "../models/coco_80_labels_list.txt"));
+    ai.result_path = resolve(ini.take("ai.result", "../run/detections.json"));
+    ai.fps = ini.integer("ai.fps", 10, 1, 60);
+    if (ai_enabled) {
+        if (!config.video) throw std::runtime_error(absolute.string() + ": AI requires video.enabled=true");
+        config.ai = ai;
     }
     ini.finish();
     return config;

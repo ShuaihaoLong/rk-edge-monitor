@@ -44,7 +44,11 @@ int main() {
         check(streaming.stream && streaming.stream->fps == 25 && streaming.stream->bitrate == 2000000,
               "stream settings not loaded");
         check(!fixture.read("[stream]\nenabled=false\n").stream, "disabled publisher instantiated");
+        auto ai_config = fixture.read("[camera]\nenabled=true\ndevice=/dev/video0\n[video]\nenabled=true\n[ai]\nenabled=true\nmodel=../models/test.rknn\nfps=8\n");
+        check(ai_config.ai && ai_config.ai->fps == 8 &&
+              ai_config.ai->model_path == (fixture.dir / "../models/test.rknn").lexically_normal().string(), "AI config wrong");
         for (const std::string text : {
+            "[ai]\nenabled=true\n", "[ai]\nfps=0\n", "[ai]\nfps=61\n",
             "[stream]\nenabled=true\n", "[stream]\nbitrate=0\n", "[stream]\ngop=0\n",
             "[stream]\ntimeout_ms=0\n", "[camera]\nenabled=true\ndevice=/dev/video0\n[video]\nenabled=true\n[stream]\nenabled=true\nurl=http://localhost\n",
             "[video]\nenabled=true\n", "[video]\ntimeout_ms=0\n",

@@ -44,7 +44,9 @@ int main() {
         using Service = video::VideoProcessService;
         auto input = std::make_shared<Service::Queue>(16);
         auto fake = std::make_unique<Decoder>();
-        Service service(std::move(fake), [&] { return input; }, {100, 2});
+        std::atomic<unsigned> copies{0};
+        Service service(std::move(fake), [&] { return input; }, {100, 2}, {}, {},
+                        [&](const camera::VideoFrame& frame) { check(frame.data[0] == 42, "fanout data invalid"); ++copies; });
         check(service.start(), "start failed");
         auto old_output = service.output();
         for (unsigned i = 0; i < 10; ++i) input->push(frame(i));
@@ -55,6 +57,7 @@ int main() {
         auto started = std::chrono::steady_clock::now();
         service.request_stop(); service.join();
         check(std::chrono::steady_clock::now() - started < std::chrono::milliseconds(500), "idle stop blocked");
+        check(copies == 10, "fanout stole or lost encoder frames");
         check(!input->closed(), "consumer closed upstream queue");
         check(old_output->closed(), "output not closed");
         input = std::make_shared<Service::Queue>(2);

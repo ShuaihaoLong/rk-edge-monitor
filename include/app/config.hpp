@@ -4,6 +4,7 @@
 #include "camera/video_source.hpp"
 #include "video/interfaces/video_decoder.hpp"
 #include "video/interfaces/video_publisher.hpp"
+#include "ai/interfaces/object_detector.hpp"
 #include <filesystem>
 #include <optional>
 
@@ -17,6 +18,7 @@ struct RuntimeConfig {
     std::optional<CameraSettings> camera;
     std::optional<video::DecodeConfig> video;
     std::optional<video::StreamConfig> stream;
+    std::optional<ai::InferenceConfig> ai;
 };
 // 完整解析、校验后返回；相对路径以配置文件所在目录为基准。
 RuntimeConfig load_config(const std::filesystem::path& path);

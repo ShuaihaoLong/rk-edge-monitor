@@ -210,3 +210,11 @@ src/video/
 ```
 
 服务只依赖接口；工厂连接接口与具体后端，应用层负责组装。目录调整不改变对外运行行为。
+
+
+### 第四阶段：NPU 能力验证
+
+已用公开预转换的 RK3588 YOLOv8n INT8 模型完成 C API 单图验证；模型无需在 PC 重新转换即可运行。
+板端 Runtime 2.1.0、驱动 0.9.6，35 次检测检查通过。独立探针位于 `examples/rknn-smoke/`，
+尚未接入实时视频或修改正式监控部署。依赖准备使用 `python3 script/prepare-ai-probe.py`。
+模型来源、固定版本、复现命令和性能边界见 [AI 能力验证说明](examples/rknn-smoke/README.md)。

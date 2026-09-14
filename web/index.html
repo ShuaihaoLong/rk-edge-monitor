@@ -7,11 +7,22 @@
   <link rel="stylesheet" href="style.css">
   <script defer src="vendor/reader.js"></script>
   <script defer src="player.js"></script>
+  <script defer src="detections.js"></script>
 </head>
 <body>
-  <main aria-label="实时监控">
-    <video id="monitor" autoplay muted playsinline aria-label="摄像头实时画面"></video>
-    <p id="status" role="status">正在连接摄像头…</p>
+  <main>
+    <aside aria-label="识别日志">
+      <header><h1>识别日志</h1><span id="ai-state">连接中</span></header>
+      <p class="hint">显示最近的检测结果</p>
+      <ol id="detection-log" aria-label="最近识别记录"></ol>
+      <p id="log-empty">等待识别结果…</p>
+    </aside>
+    <section id="viewport" aria-label="实时监控">
+      <video id="monitor" autoplay muted playsinline aria-label="摄像头实时画面"></video>
+      <canvas id="boxes" aria-hidden="true"></canvas>
+      <label class="toggle"><input id="show-boxes" type="checkbox" checked><span>显示识别框</span></label>
+      <p id="status" role="status">正在连接摄像头…</p>
+    </section>
   </main>
 </body>
 </html>

@@ -5,9 +5,9 @@
 namespace rkmon::video {
 VideoProcessService::VideoProcessService(std::unique_ptr<IVideoDecoder> decoder, InputProvider input,
                                        DecodeConfig config, FaultHandler fault,
-                                       std::shared_ptr<spdlog::logger> logger)
+                                       std::shared_ptr<spdlog::logger> logger, FrameSink sink)
     : decoder_(std::move(decoder)), provider_(std::move(input)), config_(config),
-      fault_(std::move(fault)), logger_(std::move(logger)) {
+      fault_(std::move(fault)), sink_(std::move(sink)), logger_(std::move(logger)) {
     if (!decoder_ || !provider_ || config_.queue_capacity == 0) {
         throw std::invalid_argument("invalid video processing configuration");
     }
@@ -129,6 +129,8 @@ void VideoProcessService::run() noexcept {
                               frame->width, frame->height, frame->stride, frame->size);
             }
             ++frames_;
+            // 分发只读帧引用；订阅回调必须非阻塞，下游各自维护有界队列。
+            if (sink_) sink_(*frame);
             // 下游慢时丢旧的原始图像，既不占住硬件输出，也不让内存无限增长。
             if (output_->try_push(std::move(*frame), core::OverflowPolicy::drop_oldest)
                 == core::PushResult::closed) break;

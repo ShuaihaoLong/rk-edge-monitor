@@ -22,10 +22,11 @@ public:
     using Queue = core::BoundedQueue<camera::VideoFrame>;
     // 在 start 时获取已启动上游的当前队列，避免重启后继续消费旧队列。
     using InputProvider = std::function<std::shared_ptr<Queue>()>;
+    using FrameSink = std::function<void(const camera::VideoFrame&)>;
     using FaultHandler = std::function<void(const std::string&)>;
     VideoProcessService(std::unique_ptr<IVideoDecoder> decoder, InputProvider input,
                         DecodeConfig config = {}, FaultHandler fault = {},
-                        std::shared_ptr<spdlog::logger> logger = {});
+                        std::shared_ptr<spdlog::logger> logger = {}, FrameSink sink = {});
     ~VideoProcessService() override;
     bool start() override;
     void request_stop() noexcept override;
@@ -47,6 +48,7 @@ private:
     InputProvider provider_;
     DecodeConfig config_;
     FaultHandler fault_;
+    FrameSink sink_;
     std::shared_ptr<spdlog::logger> logger_;
     std::shared_ptr<Queue> input_, output_;
     std::thread worker_;
