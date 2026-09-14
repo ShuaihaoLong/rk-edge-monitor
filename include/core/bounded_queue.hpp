@@ -1,6 +1,7 @@
 #pragma once
 
 #include <condition_variable>
+#include <chrono>
 #include <cstddef>
 #include <deque>
 #include <mutex>
@@ -68,6 +69,13 @@ public:
 
     std::optional<T> try_pop() {
         std::unique_lock lock(mutex_);
+        return take(lock);
+    }
+
+    // 有限等待便于消费者检查自身停止状态，不必关闭上游拥有的队列。
+    std::optional<T> pop_for(std::chrono::milliseconds timeout) {
+        std::unique_lock lock(mutex_);
+        not_empty_.wait_for(lock, timeout, [this] { return closed_ || !queue_.empty(); });
         return take(lock);
     }
 

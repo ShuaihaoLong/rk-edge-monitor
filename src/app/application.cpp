@@ -1,6 +1,8 @@
 #include "app/application.hpp"
 #include "app/config.hpp"
 #include "camera/video_capture_service.hpp"
+#include "video/video_process_service.hpp"
+#include "video/video_stream_service.hpp"
 
 #include <exception>
 #include <iostream>
@@ -14,9 +16,27 @@ Application::ServiceFactory make_service_factory(RuntimeConfig config) {
                                        std::shared_ptr<spdlog::logger> logger) {
         Application::ServiceList services;
         if (config.camera) {
-            services.push_back(std::make_unique<camera::VideoCaptureService>(
+            auto capture = std::make_unique<camera::VideoCaptureService>(
                 config.camera->capture, config.camera->queue_capacity,
-                [report](const std::string& reason) { report("video_capture", reason); }, logger));
+                [report](const std::string& reason) { report("video_capture", reason); }, logger);
+            auto* capture_view = capture.get();
+            services.push_back(std::move(capture));
+            if (config.video) {
+                // 上游先启动；provider 在解码 start 时才读取当次采集队列。
+                // ServiceManager 逆序停止/等待，借用的采集服务覆盖解码服务的运行期。
+                auto decode = std::make_unique<video::VideoProcessService>(
+                    video::make_hardware_decoder(*config.video),
+                    [capture_view] { return capture_view->output(); }, *config.video,
+                    [report](const std::string& reason) { report("video_decode", reason); }, logger);
+                auto* decode_view = decode.get();
+                services.push_back(std::move(decode));
+                if (config.stream) {
+                    services.push_back(std::make_unique<video::VideoStreamService>(
+                        video::make_hardware_publisher(*config.stream),
+                        [decode_view] { return decode_view->output(); },
+                        [report](const std::string& reason) { report("video_stream", reason); }, logger));
+                }
+            }
         }
         return services;
     };

@@ -35,7 +35,20 @@ int main() {
         check(config.camera->queue_capacity == 2 && config.camera->capture.format == rkmon::camera::PixelFormat::YUYV,
               "camera configuration wrong");
         check(!fixture.read("[camera]\nenabled=false\n").camera, "disabled camera instantiated");
+        auto decoded = fixture.read("[camera]\nenabled=true\ndevice=/dev/video0\n[video]\nenabled=true\ntimeout_ms=500\nqueue_capacity=2\n");
+        check(decoded.video && decoded.video->timeout_ms == 500 && decoded.video->queue_capacity == 2,
+              "video settings not loaded");
+        check(!fixture.read("[video]\nenabled=false\n").video, "disabled decoder instantiated");
+        auto streaming = fixture.read("[camera]\nenabled=true\ndevice=/dev/video0\nfps=25\n"
+            "[video]\nenabled=true\n[stream]\nenabled=true\nbitrate=2000000\ngop=25\n");
+        check(streaming.stream && streaming.stream->fps == 25 && streaming.stream->bitrate == 2000000,
+              "stream settings not loaded");
+        check(!fixture.read("[stream]\nenabled=false\n").stream, "disabled publisher instantiated");
         for (const std::string text : {
+            "[stream]\nenabled=true\n", "[stream]\nbitrate=0\n", "[stream]\ngop=0\n",
+            "[stream]\ntimeout_ms=0\n", "[camera]\nenabled=true\ndevice=/dev/video0\n[video]\nenabled=true\n[stream]\nenabled=true\nurl=http://localhost\n",
+            "[video]\nenabled=true\n", "[video]\ntimeout_ms=0\n",
+            "[camera]\nenabled=true\ndevice=/dev/video0\nformat=YUYV\n[video]\nenabled=true\n",
             "[app]\nunknown=1\n", "[unknown]\n", "[camera\n", "enabled=true\n",
             "[camera]\nenabled=yes\n", "[camera]\nenabled=true\n", "[camera]\nfps=30oops\n",
             "[camera]\nfps=-1\n", "[camera]\nwidth=999999999999999999\n", "[camera]\nqueue_capacity=0\n",

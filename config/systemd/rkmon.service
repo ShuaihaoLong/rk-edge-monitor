@@ -1,0 +1,19 @@
+[Unit]
+Description=RK3588 camera hardware decode and encode service
+After=network-online.target mediamtx.service
+Wants=network-online.target mediamtx.service
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+User=elf
+WorkingDirectory=/opt/rkmon
+ExecStart=/opt/rkmon/bin/rkmon --config /opt/rkmon/config/rkmon.ini
+Restart=on-failure
+RestartSec=2
+KillSignal=SIGTERM
+TimeoutStopSec=15
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target

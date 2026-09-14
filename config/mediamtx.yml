@@ -1,0 +1,39 @@
+# RK3588 局域网监控：应用向本机 RTSP 发布，浏览器通过 WHEP 读取。
+logLevel: info
+logDestinations: [stdout]
+authMethod: internal
+authInternalUsers:
+  - user: any
+    ips: [127.0.0.1, '::1']
+    permissions:
+      - action: publish
+        path: camera
+  - user: any
+    ips: []
+    permissions:
+      - action: read
+        path: camera
+api: false
+metrics: false
+pprof: false
+playback: false
+rtsp: true
+rtspAddress: 127.0.0.1:8554
+rtspTransports: [tcp]
+rtmp: false
+hls: false
+srt: false
+moq: false
+webrtc: true
+webrtcAddress: 127.0.0.1:8889
+webrtcAllowOrigins: ['http://192.168.100.11:9000', 'http://127.0.0.1:9000']
+webrtcTrustedProxies: [127.0.0.1]
+webrtcLocalUDPAddress: :8189
+webrtcLocalTCPAddress: ''
+webrtcIPsFromInterfaces: false
+# 板卡地址改变时，同时更新此地址和上面的网页来源。
+webrtcAdditionalHosts: [192.168.100.11]
+webrtcICEServers2: []
+paths:
+  camera:
+    source: publisher

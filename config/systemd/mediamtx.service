@@ -1,0 +1,18 @@
+[Unit]
+Description=MediaMTX local WebRTC media server
+After=network-online.target
+Wants=network-online.target
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+User=elf
+WorkingDirectory=/opt/rkmon
+ExecStart=/opt/rkmon/bin/mediamtx /opt/rkmon/config/mediamtx.yml
+Restart=on-failure
+RestartSec=2
+TimeoutStopSec=15
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target

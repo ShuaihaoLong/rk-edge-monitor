@@ -1,0 +1,47 @@
+#!/usr/bin/env bash
+# 用途：在 RK3588 上安装打包好的监控程序、网页和 systemd 服务。
+# 示例：sudo bash /tmp/rkmon-deploy/script/install-monitor.sh
+# 参数：--help 显示说明；无环境变量。固定运行用户 elf，安装目录 /opt/rkmon。
+# 前提：ARM64、已安装 Nginx 和 Rockchip GStreamer 插件，以 root 运行；
+#       包内含 bin/rkmon、bin/mediamtx、config/ 和 web/，无需联网。
+# 输出：/opt/rkmon；备份位于 /opt/rkmon-backup.<时间>；日志由 journal 和 logs/ 保存。
+# 副作用：更新服务及 9000 端口站点，启用开机启动并重启服务；不修改其他 Nginx 站点。
+set -euo pipefail
+if [[ ${1:-} == --help || ${1:-} == -h ]]; then
+    sed -n '2,8s/^# \{0,1\}//p' "${BASH_SOURCE[0]}"
+    exit 0
+fi
+[[ $# == 0 ]] || { echo '错误：不支持的参数' >&2; exit 2; }
+[[ $EUID == 0 && $(uname -m) == aarch64 ]] || { echo '错误：请在 ARM64 板卡上以 root 运行' >&2; exit 1; }
+source_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
+for file in bin/rkmon bin/mediamtx config/rkmon.ini config/mediamtx.yml config/nginx-monitor.conf config/systemd/rkmon.service config/systemd/mediamtx.service web/index.html web/player.js web/vendor/reader.js; do
+    [[ -f $source_dir/$file ]] || { echo "错误：缺少 $file" >&2; exit 1; }
+done
+id elf >/dev/null
+command -v nginx >/dev/null
+# 先验证媒体配置和动态库，避免安装不完整的包后停止现有服务。
+"$source_dir/bin/mediamtx" --validate-conf "$source_dir/config/mediamtx.yml"
+if ldd "$source_dir/bin/rkmon" | grep -q 'not found'; then
+    echo '错误：rkmon 缺少动态库' >&2
+    exit 1
+fi
+backup_dir=$(mktemp -d /opt/rkmon-backup.XXXXXXXX)
+for path in /opt/rkmon /etc/nginx/sites-available/rkmon /etc/nginx/sites-enabled/rkmon /etc/systemd/system/rkmon.service /etc/systemd/system/mediamtx.service; do
+    if [[ -e $path || -L $path ]]; then cp -a --parents "$path" "$backup_dir/"; fi
+done
+systemctl stop rkmon.service mediamtx.service 2>/dev/null || true
+install -d -m 755 /opt/rkmon/bin /opt/rkmon/config /opt/rkmon/web
+install -d -m 755 -o elf -g "$(id -gn elf)" /opt/rkmon/logs
+install -m 755 "$source_dir/bin/"{rkmon,mediamtx} /opt/rkmon/bin/
+install -m 644 "$source_dir/config/"{rkmon.ini,mediamtx.yml} /opt/rkmon/config/
+cp -R "$source_dir/web/." /opt/rkmon/web/
+chmod -R a+rX /opt/rkmon/web
+install -m 644 "$source_dir/config/systemd/"{rkmon,mediamtx}.service /etc/systemd/system/
+install -m 644 "$source_dir/config/nginx-monitor.conf" /etc/nginx/sites-available/rkmon
+ln -sfn /etc/nginx/sites-available/rkmon /etc/nginx/sites-enabled/rkmon
+nginx -t
+systemctl daemon-reload
+systemctl enable nginx.service mediamtx.service rkmon.service
+systemctl restart mediamtx.service rkmon.service
+systemctl reload nginx.service
+printf '安装完成；备份：%s\n监控：http://192.168.100.11:9000\n' "$backup_dir"

@@ -34,7 +34,7 @@ public:
             if (line.front() == '[') {
                 if (line.back() != ']') error(number, "malformed section");
                 section = trim(line.substr(1, line.size() - 2));
-                if (section != "app" && section != "logging" && section != "camera")
+                if (section != "app" && section != "logging" && section != "camera" && section != "video" && section != "stream")
                     error(number, "unknown section: " + section);
                 if (!sections.insert(section).second) error(number, "duplicate section: " + section);
                 continue;
@@ -126,6 +126,33 @@ RuntimeConfig load_config(const std::filesystem::path& path) {
     else if (format == "YUYV") capture.format = camera::PixelFormat::YUYV;
     else throw std::runtime_error(absolute.string() + ": camera.format must be MJPG or YUYV");
     if (enabled) config.camera = std::move(camera);
+    const bool decode_enabled = ini.boolean("video.enabled", false);
+    video::DecodeConfig decode;
+    decode.timeout_ms = ini.integer("video.timeout_ms", 2000, 1, 60000);
+    decode.queue_capacity = ini.integer("video.queue_capacity", 4, 1, 64);
+    if (decode_enabled) {
+        if (!config.camera || config.camera->capture.format != camera::PixelFormat::MJPG) {
+            throw std::runtime_error(absolute.string() + ": video decoding requires an enabled MJPG camera");
+        }
+        config.video = decode;
+    }
+    const bool stream_enabled = ini.boolean("stream.enabled", false);
+    video::StreamConfig stream;
+    stream.url = ini.take("stream.url", "rtsp://127.0.0.1:8554/camera");
+    stream.bitrate = ini.integer("stream.bitrate", 4000000, 100000, 100000000);
+    stream.gop = ini.integer("stream.gop", 30, 1, 1000);
+    stream.timeout_ms = ini.integer("stream.timeout_ms", 5000, 100, 60000);
+    if (stream_enabled) {
+        if (!config.video) {
+            throw std::runtime_error(absolute.string() + ": streaming requires video.enabled=true");
+        }
+        if (stream.url.rfind("rtsp://", 0) != 0 || stream.url.size() <= 7 ||
+            stream.url.find_first_of(" \t\r\n") != std::string::npos) {
+            throw std::runtime_error(absolute.string() + ": stream.url must be an RTSP URL");
+        }
+        stream.fps = config.camera->capture.fps;
+        config.stream = stream;
+    }
     ini.finish();
     return config;
 }
