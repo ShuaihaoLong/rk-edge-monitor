@@ -1,6 +1,6 @@
-#include "video_decoder.hpp"
+#include "video/interfaces/video_decoder.hpp"
 #ifdef RKMON_WITH_GSTREAMER
-#include "gst_video_pipeline.hpp"
+#include "video/gstreamer/gst_video_pipeline.hpp"
 #endif
 #include <stdexcept>
 

@@ -2,8 +2,8 @@
 
 #include "app/application.hpp"
 #include "camera/video_source.hpp"
-#include "video/video_decoder.hpp"
-#include "video/video_publisher.hpp"
+#include "video/interfaces/video_decoder.hpp"
+#include "video/interfaces/video_publisher.hpp"
 #include <filesystem>
 #include <optional>
 

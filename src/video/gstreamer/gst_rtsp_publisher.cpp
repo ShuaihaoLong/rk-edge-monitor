@@ -1,4 +1,4 @@
-#include "gst_rtsp_publisher.hpp"
+#include "video/gstreamer/gst_rtsp_publisher.hpp"
 #include <gst/app/gstappsrc.h>
 #include <gst/video/video.h>
 #include <atomic>

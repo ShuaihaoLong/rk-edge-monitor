@@ -1,6 +1,6 @@
 #include "app/config.hpp"
 #include "camera/video_capture_service.hpp"
-#include "video/video_process_service.hpp"
+#include "video/services/video_process_service.hpp"
 #include <iostream>
 #include <stdexcept>
 #include <thread>

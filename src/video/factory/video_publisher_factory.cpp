@@ -1,6 +1,6 @@
-#include "video_publisher.hpp"
+#include "video/interfaces/video_publisher.hpp"
 #ifdef RKMON_WITH_GSTREAMER
-#include "gst_rtsp_publisher.hpp"
+#include "video/gstreamer/gst_rtsp_publisher.hpp"
 #endif
 #include <stdexcept>
 

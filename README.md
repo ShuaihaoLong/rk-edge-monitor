@@ -87,9 +87,9 @@ bash script/start.sh --binary /path/to/rkmon --config /path/to/rkmon.ini
 
 `[video] enabled=true` 要求相机已启用且配置为 MJPG；省略该节默认不创建解码服务。`timeout_ms` 默认 2000（范围 1–60000），是单帧等待时限；`queue_capacity` 默认 4（范围 1–64），控制解码后的输出队列。仓库板端配置已启用解码。硬件插件缺失或解码失败会明确报告故障，不静默切换软件解码。
 
-- `src/video/video_decoder.hpp`：不含 GStreamer 类型的解码契约。
-- `src/video/gst_video_pipeline.*`：Pimpl 隔离管线、GstBuffer 所有权、Bus 错误和 NV12 布局处理。
-- `src/video/video_process_service.*`：仅依赖解码接口与队列，接入现有 IService 生命周期。
+- `src/video/interfaces/video_decoder.hpp`：不含 GStreamer 类型的解码契约。
+- `src/video/gstreamer/gst_video_pipeline.*`：Pimpl 隔离管线、GstBuffer 所有权、Bus 错误和 NV12 布局处理。
+- `src/video/services/video_process_service.*`：仅依赖解码接口与队列，接入现有 IService 生命周期。
 - `src/app/application.cpp`：唯一的采集/解码组装位置，先启动采集，再获取其当前队列并启动解码。
 
 第一版每次一个 JPEG 请求在途。压缩输入复制到 GstBuffer，硬解输出通过 GstVideoFrame 的实际 stride/平面信息逐行复制为紧密排列 NV12：Y 偏移 0，UV 偏移 width×height，stride=width，大小 width×height×3/2。输出保留来源 sequence/timestamp；超时立即升级为故障，避免迟到帧与新请求错配。该实现优先保证生命周期清楚，不是零拷贝。
@@ -118,9 +118,9 @@ bash script/start.sh --binary /path/to/rkmon --config /path/to/rkmon.ini
 链路：V4L2 MJPEG → `mppjpegdec` → NV12 有界队列 → `mpph264enc` → 本机 RTSP → MediaMTX → WebRTC → 浏览器。
 默认 1920×1080、30 fps、H.264 Baseline、4 Mbps、GOP 30；无音频。当前 NV12 在模块边界复制，尚未实现 DMA-BUF 零拷贝。
 
-- `src/video/video_publisher.hpp`：发布接口和配置，不暴露 GStreamer 类型。
-- `src/video/gst_rtsp_publisher.*`：GStreamer 管线、NV12 布局转换、时间戳、硬件编码及 RTSP 错误检测。
-- `src/video/video_stream_service.*`：消费解码队列、线程生命周期及故障上报，依赖注入 `IVideoPublisher`。
+- `src/video/interfaces/video_publisher.hpp`：发布接口和配置，不暴露 GStreamer 类型。
+- `src/video/gstreamer/gst_rtsp_publisher.*`：GStreamer 管线、NV12 布局转换、时间戳、硬件编码及 RTSP 错误检测。
+- `src/video/services/video_stream_service.*`：消费解码队列、线程生命周期及故障上报，依赖注入 `IVideoPublisher`。
 - `src/app/application.cpp`：按采集、解码、发布顺序组装，停止时逆序请求退出和回收。
 - `config/rkmon.ini` 的 `[stream]`：启用开关、发布 URL、码率、关键帧间隔和无编码输出超时；帧率沿用相机配置。
 
@@ -175,3 +175,38 @@ sudo systemctl start mediamtx rkmon
 相机当前 `exposure_auto=3`、`exposure_auto_priority=1`，允许自动曝光改变帧率，
 是输入波动的可能原因；本次未修改相机曝光策略。
 控制项定义见 [Linux V4L2 文档](https://docs.kernel.org/userspace-api/media/v4l/ext-ctrls-camera.html)。
+
+
+### PC 一键部署与更新
+
+在 PC/WSL 执行，首次部署和后续更新使用同一入口：
+
+```bash
+bash script/deploy.sh
+# 先检查计划，不构建、不连接板卡、不修改文件：
+bash script/deploy.sh --dry-run
+# 已完成 ARM64 构建时，复用产物：
+bash script/deploy.sh --skip-build
+# SSH 别名/目标、并行数和安装包可以指定：
+bash script/deploy.sh --host elf@192.168.100.11 --jobs 4
+```
+
+支持从任意工作目录调用。默认检查 SSH 后构建，再打包、上传独立临时目录、调用板端安装脚本、检查服务及 HTTP，最后清理临时文件。
+SSH 使用密钥登录；板端 sudo 如需密码，会在终端询问。构建、传输、安装或健康检查失败返回非零，不显示部署成功。
+安装期间短暂停流；旧文件备份到 `/opt/rkmon-backup.*`。更新会覆盖板端项目配置，部署前将需要保留的修改同步到仓库 `config/`。
+`--host` 仅改变 SSH 连接目标；运行用户仍为 `elf`，访问地址和 WebRTC 地址需按配置调整。
+本脚本不安装系统依赖，板端需预先具备 Nginx、Rockchip MPP/GStreamer 和 curl。
+后续部署变动统一维护此入口及其打包/安装子脚本。
+
+`src/video` 按职责组织：
+
+```text
+src/video/
+├── interfaces/   # 解码与发布契约、参数，不包含 GStreamer 类型
+├── services/     # 消费帧队列、线程生命周期和故障上报
+├── gstreamer/    # MPP 解码、编码及 RTSP 管线实现
+├── factory/      # 根据构建选项选择具体实现
+└── CMakeLists.txt
+```
+
+服务只依赖接口；工厂连接接口与具体后端，应用层负责组装。目录调整不改变对外运行行为。

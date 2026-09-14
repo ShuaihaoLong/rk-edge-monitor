@@ -1,6 +1,6 @@
 #pragma once
 
-#include "video_decoder.hpp"
+#include "video/interfaces/video_decoder.hpp"
 
 namespace rkmon::video {
 

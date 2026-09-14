@@ -1,5 +1,5 @@
 #pragma once
-#include "video_publisher.hpp"
+#include "video/interfaces/video_publisher.hpp"
 
 namespace rkmon::video {
 class GstRtspPublisher final : public IVideoPublisher {
