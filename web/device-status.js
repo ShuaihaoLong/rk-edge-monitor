@@ -3,12 +3,19 @@
   const state = document.getElementById("mqtt-state");
   const list = document.getElementById("device-list");
   const empty = document.getElementById("device-empty");
+  const sensorList = document.getElementById("sensor-list");
+  const sensorEmpty = document.getElementById("sensor-empty");
   const devices = new Map();
+  const sensors = new Map();
   let client = null;
+  let connected = false;
 
-  function setConnection(connected) {
-    state.textContent = connected ? "已连接" : "正在重连";
-    state.dataset.state = connected ? "ok" : "offline";
+  function setConnection(value) {
+    connected = value;
+    state.textContent = value ? "已连接" : "正在重连";
+    state.dataset.state = value ? "ok" : "offline";
+    if (!value) sensors.forEach((sensor) => { sensor.sample = null; sensor.status = null; });
+    render();
   }
 
   function validStatus(value) {
@@ -37,7 +44,7 @@
       const interval = Number.isFinite(device.heartbeat_interval_ms) ? device.heartbeat_interval_ms : 2000;
       const stale = typeof device.updated_at_ms !== "number" ||
         now - device.updated_at_ms > Math.max(8000, interval * 3);
-      const online = device.online && !stale;
+      const online = connected && device.online && !stale;
       const card = document.createElement("article");
       card.className = `device${online ? "" : " offline"}`;
       const heading = document.createElement("h2");
@@ -51,13 +58,81 @@
       addField(details, "角色", device.role === "center" ? "中心节点" : "边缘节点");
       addField(details, "IP", device.ip || "—");
       addField(details, "CPU", valueText(device.cpu_usage_percent, "%"));
-      addField(details, "温度", valueText(device.cpu_temperature_c, " °C"));
+      addField(details, "CPU 温度", valueText(device.cpu_temperature_c, " °C"));
       addField(details, "摄像头", online && device.camera_online ? "在线" : "离线",
         online && device.camera_online ? "" : "bad");
       card.append(heading, details);
       list.append(card);
     });
     empty.hidden = devices.size > 0;
+    renderSensors();
+  }
+
+  function renderSensors() {
+    sensorList.replaceChildren();
+    const now = performance.now();
+    [...sensors.entries()].sort(([a], [b]) => a.localeCompare(b)).forEach(([id, sensor]) => {
+      const timeout = sensor.status?.stale_timeout_ms || 5000;
+      const interval = devices.get(id)?.heartbeat_interval_ms || 2000;
+      const statusFresh = sensor.status && now - sensor.statusAt <= Math.max(8000, interval * 3);
+      const sampleFresh = sensor.sample && now - sensor.sampleAt <= timeout;
+      const live = connected && statusFresh && sensor.status.online && sampleFresh;
+      const label = !connected ? "连接中断" : !statusFresh ? "等待设备状态" :
+        !sensor.status.online ? "暂无有效数据" : live ? "实时" : sensor.sample ? "数据已过期" : "等待采样";
+      const card = document.createElement("article");
+      card.className = "sensor";
+      card.dataset.state = live ? "ok" : "stale";
+      const heading = document.createElement("h2");
+      const name = document.createElement("span");
+      name.textContent = id;
+      const badge = document.createElement("span");
+      badge.className = "sensor-state";
+      badge.textContent = label;
+      heading.append(name, badge);
+      const readings = document.createElement("dl");
+      readings.className = "sensor-readings";
+      [["环境温度", "temperature_c", "°C", "temperature"],
+       ["相对湿度", "humidity_percent", "%RH", "humidity"]].forEach(([title, field, unit, className]) => {
+        const group = document.createElement("div");
+        const term = document.createElement("dt");
+        term.textContent = title;
+        const value = document.createElement("dd");
+        value.className = className;
+        value.textContent = live ? valueText(sensor.sample[field]) : "—";
+        const suffix = document.createElement("small");
+        suffix.textContent = unit;
+        value.append(suffix);
+        group.append(term, value);
+        readings.append(group);
+      });
+      const updated = document.createElement("p");
+      updated.className = "sensor-update";
+      updated.textContent = live ? `最近接收 · ${Math.floor((now - sensor.sampleAt) / 1000)} 秒前` : "等待新的有效温湿度数据";
+      card.append(heading, readings, updated);
+      sensorList.append(card);
+    });
+    sensorEmpty.hidden = sensors.size > 0;
+    sensorEmpty.textContent = connected ? "等待温湿度数据…" : "数据连接中断，正在重连…";
+  }
+
+  function receiveSensor(id, kind, value, packet) {
+    if (!value || value.schema !== 1) return;
+    const sensor = sensors.get(id) || {};
+    if (kind === "status") {
+      if (typeof value.online !== "boolean" || !Number.isFinite(value.stale_timeout_ms) ||
+          value.stale_timeout_ms < 500 || value.stale_timeout_ms > 60000) return;
+      sensor.status = value;
+      sensor.statusAt = performance.now();
+      if (!value.online) sensor.sample = null;
+    } else {
+      // 温湿度不是 retained 消息，避免把 broker 留存的历史读数当作当前采样。
+      if (packet?.retain || !Number.isFinite(value.temperature_c) || value.temperature_c < 0 || value.temperature_c > 50 ||
+          !Number.isFinite(value.humidity_percent) || value.humidity_percent < 0 || value.humidity_percent > 100) return;
+      sensor.sample = value;
+      sensor.sampleAt = performance.now();
+    }
+    sensors.set(id, sensor);
+    render();
   }
 
   function start() {
@@ -76,14 +151,20 @@
     });
     client.on("connect", () => {
       setConnection(true);
-      client.subscribe("rkmon/devices/+/status", {qos: 0}, (error) => {
-        if (error) setConnection(false);
+      client.subscribe(["rkmon/devices/+/status", "rkmon/devices/+/stm32/status",
+        "rkmon/devices/+/stm32/telemetry"], {qos: 0}, (error, granted) => {
+        if (error || granted?.some((subscription) => subscription.qos === 128)) setConnection(false);
       });
     });
-    client.on("message", (topic, payload) => {
+    client.on("message", (topic, payload, packet) => {
       try {
         const status = JSON.parse(payload.toString());
         const parts = topic.split("/");
+        if (parts[0] !== "rkmon" || parts[1] !== "devices" || !/^[A-Za-z0-9_-]{1,64}$/.test(parts[2])) return;
+        if (parts.length === 5 && parts[3] === "stm32" && ["status", "telemetry"].includes(parts[4])) {
+          receiveSensor(parts[2], parts[4], status, packet);
+          return;
+        }
         if (!validStatus(status) || parts.length !== 4 || parts[0] !== "rkmon" ||
             parts[1] !== "devices" || parts[2] !== status.device_id || parts[3] !== "status") return;
         devices.set(status.device_id, status);
@@ -95,10 +176,19 @@
     client.on("error", () => setConnection(false));
   }
 
-  const refresh = setInterval(render, 1000);
+  let refresh = setInterval(render, 1000);
   window.addEventListener("pagehide", () => {
     clearInterval(refresh);
+    refresh = null;
     if (client) client.end(true);
+    client = null;
+    setConnection(false);
+  });
+  window.addEventListener("pageshow", () => {
+    if (refresh === null) {
+      refresh = setInterval(render, 1000);
+      start();
+    }
   });
   setConnection(false);
   start();

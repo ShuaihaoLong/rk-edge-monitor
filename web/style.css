@@ -1,8 +1,9 @@
 :root { color-scheme: dark; font-family: system-ui, sans-serif; color: #dce5ee; background: #090e15; }
 * { box-sizing: border-box; }
 html, body { margin: 0; width: 100%; height: 100%; }
-main { display: grid; grid-template-columns: 290px minmax(0, 1fr); width: 100%; height: 100%; }
-aside { padding: 24px 18px; overflow-y: auto; border-right: 1px solid #26313e; background: #111923; }
+main { display: grid; grid-template-columns: 300px minmax(0, 880px); gap: 24px; max-width: 1252px; margin: 0 auto; padding: 24px; align-items: start; }
+aside { min-width: 0; padding: 20px 16px; border: 1px solid #26313e; border-radius: 12px; background: #111923; }
+.monitor-area { min-width: 0; display: grid; gap: 20px; }
 header { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 h1 { margin: 0; font-size: 18px; font-weight: 600; }
 #ai-state, #mqtt-state { font-size: 12px; color: #94a7b8; }
@@ -12,25 +13,41 @@ h1 { margin: 0; font-size: 18px; font-weight: 600; }
 #device-list { display: grid; gap: 10px; margin-top: 16px; }
 .device { padding: 12px; border: 1px solid #2c3947; border-radius: 8px; background: #0c131c; }
 .device.offline { opacity: .65; }
-.device h2 { display: flex; justify-content: space-between; gap: 8px; margin: 0 0 9px; font-size: 14px; }
+.device h2 { display: flex; justify-content: space-between; gap: 8px; margin: 0 0 9px; font-size: 14px; overflow-wrap: anywhere; }
 .device .badge { color: #7ee9aa; font-size: 12px; font-weight: 500; }
 .device.offline .badge, .device .bad { color: #f59a9a; }
 .device dl { display: grid; grid-template-columns: 72px 1fr; gap: 5px 8px; margin: 0; font-size: 12px; }
 .device dt { color: #8293a4; }
 .device dd { margin: 0; overflow-wrap: anywhere; }
-#detection-log { list-style: none; padding: 0; margin: 24px 0 0; }
+#detection-log { list-style: none; padding: 0; margin: 16px 0 0; max-height: 360px; overflow-y: auto; }
 #detection-log li { padding: 12px 0; border-top: 1px solid #24303c; font-size: 13px; line-height: 1.6; overflow-wrap: anywhere; }
 #detection-log time { display: block; color: #7f91a2; font-size: 11px; margin-bottom: 3px; }
-#viewport { min-width: 0; min-height: 0; position: relative; overflow: hidden; background: #05080c; }
+#viewport { min-width: 0; aspect-ratio: 16 / 9; position: relative; overflow: hidden; background: #05080c; border: 1px solid #26313e; border-radius: 12px; }
 video { display: block; width: 100%; height: 100%; object-fit: contain; }
 #boxes { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
 .toggle { position: absolute; top: 18px; right: 18px; display: flex; align-items: center; gap: 10px; padding: 10px 14px; border: 1px solid #415064; border-radius: 8px; background: #111923e8; font-size: 13px; cursor: pointer; }
 .toggle input { accent-color: #74e5a6; width: 17px; height: 17px; cursor: pointer; }
 #status { position: absolute; inset: 50% 0 auto; margin: 0; padding: 10px; text-align: center; transform: translateY(-50%); pointer-events: none; }
 #status[hidden], [hidden] { display: none !important; }
-@media (max-width: 700px) {
-  main { grid-template-columns: 1fr; grid-template-rows: minmax(220px, 65%) minmax(0, 35%); }
-  #viewport { grid-row: 1; }
-  aside { grid-row: 2; padding: 14px; border-right: none; border-top: 1px solid #26313e; }
+.environment { padding: 20px; border: 1px solid #26313e; border-radius: 12px; background: #111923; }
+#sensor-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr)); gap: 14px; }
+.sensor { min-width: 0; margin-top: 16px; padding: 16px; border-radius: 8px; background: #0c131c; border: 1px solid #2c3947; }
+.sensor h2 { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; margin: 0 0 18px; font-size: 14px; }
+.sensor h2 span:first-child { overflow-wrap: anywhere; min-width: 0; }
+.sensor-state { flex-shrink: 0; font-size: 12px; font-weight: 400; color: #94a7b8; }
+.sensor[data-state="ok"] .sensor-state { color: #7ee9aa; }
+.sensor-readings { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 0; }
+.sensor-readings dt { color: #94a7b8; font-size: 13px; margin-bottom: 8px; }
+.sensor-readings dd { margin: 0; font-size: clamp(26px, 3vw, 36px); font-weight: 600; font-variant-numeric: tabular-nums; }
+.sensor-readings small { font-size: 14px; font-weight: 400; color: #94a7b8; margin-left: 6px; }
+.sensor[data-state="ok"] .temperature { color: #ffcc91; }
+.sensor[data-state="ok"] .humidity { color: #87d3ed; }
+.sensor-update { margin: 16px 0 0; font-size: 12px; color: #8293a4; }
+@media (max-width: 800px) {
+  main { grid-template-columns: 1fr; gap: 16px; padding: 14px; }
+  .monitor-area { grid-row: 1; gap: 16px; }
+  aside { grid-row: 2; padding: 16px; }
+  .environment { padding: 16px; }
+  .toggle { top: 10px; right: 10px; padding: 7px 10px; font-size: 12px; }
   #detection-log { margin-top: 12px; }
 }

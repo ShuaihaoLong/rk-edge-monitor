@@ -26,12 +26,19 @@
       <p id="log-empty">等待识别结果…</p>
       </section>
     </aside>
-    <section id="viewport" aria-label="实时监控">
-      <video id="monitor" autoplay muted playsinline aria-label="摄像头实时画面"></video>
-      <canvas id="boxes" aria-hidden="true"></canvas>
-      <label class="toggle"><input id="show-boxes" type="checkbox" checked><span>显示识别框</span></label>
-      <p id="status" role="status">正在连接摄像头…</p>
-    </section>
+    <div class="monitor-area">
+      <section id="viewport" aria-label="实时监控">
+        <video id="monitor" autoplay muted playsinline aria-label="摄像头实时画面"></video>
+        <canvas id="boxes" aria-hidden="true"></canvas>
+        <label class="toggle"><input id="show-boxes" type="checkbox" checked><span>显示识别框</span></label>
+        <p id="status" role="status">正在连接摄像头…</p>
+      </section>
+      <section class="environment" aria-label="环境温湿度">
+        <header><h1>环境温湿度</h1><span class="hint">DHT11 · 实时采样</span></header>
+        <div id="sensor-list"></div>
+        <p id="sensor-empty" class="hint">等待温湿度数据…</p>
+      </section>
+    </div>
   </main>
 </body>
 </html>
