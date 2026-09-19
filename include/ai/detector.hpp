@@ -16,6 +16,7 @@ struct DetectionResult {
     std::uint64_t sequence{};
     std::uint64_t source_generation{};
     unsigned worker_index{};
+    bool source_dma{},input_dma{};
     std::chrono::steady_clock::time_point source_time{};
     int width{}, height{};
     double inference_ms{};

@@ -146,8 +146,8 @@ void VideoProcessService::run() noexcept {
                     throw std::runtime_error("decoder stopped unexpectedly");
                 }
                 if (frames_ == 0 && logger_) {
-                    logger_->info("[video_decode] first NV12 frame: {}x{}, stride={}, bytes={}",
-                                  frame->width, frame->height, frame->stride, frame->size);
+                    logger_->info("[video_decode] first NV12 frame: {}x{}, stride={}, bytes={}, dma={}",
+                                  frame->width, frame->height, frame->stride, frame->size, bool(frame->dma));
                 }
                 ++frames_;
                 // 分发只读帧引用；订阅回调必须非阻塞，下游各自维护有界队列。

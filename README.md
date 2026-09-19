@@ -92,7 +92,7 @@ bash script/start.sh --binary /path/to/rkmon --config /path/to/rkmon.ini
 - `src/media/services/video_process_service.*`：仅依赖解码接口与队列，接入现有 IService 生命周期。
 - `src/app/application.cpp`：唯一的采集/解码组装位置，先启动采集，再获取其当前队列并启动解码。
 
-第一版每次一个 JPEG 请求在途。压缩输入复制到 GstBuffer，硬解输出通过 GstVideoFrame 的实际 stride/平面信息逐行复制为紧密排列 NV12：Y 偏移 0，UV 偏移 width×height，stride=width，大小 width×height×3/2。输出保留来源 sequence/timestamp；超时立即升级为故障，避免迟到帧与新请求错配。该实现优先保证生命周期清楚，不是零拷贝。
+每次一个 JPEG 请求在途。压缩输入仍复制到 GstBuffer，硬解输出保留原始 DMA-BUF 及其 GstBuffer 引用，按 VideoMeta 记录实际 stride、UV 偏移和高度对齐。最后一个消费者释放后才归还解码池，不再逐行复制完整 NV12。输出保留来源 sequence/timestamp；超时立即升级为故障，避免迟到帧与新请求错配。
 
 视频帧在 V4L2 `DQBUF` 成功后、图像复制前记录主控收帧时间：`timestamp` 使用单调时钟，
 用于耗时和视频 PTS；`received_at` 使用系统时钟，供日期水印使用。解码沿用原帧的两种时间，
@@ -136,7 +136,7 @@ AI 分支共享的原始帧不受影响。水印进入编码视频，积压或�
 页面仅显示实时画面与连接状态，使用 MediaMTX v1.21.0 自带的 WHEP reader，许可证保存在 `web/vendor/`。
 
 链路：V4L2 MJPEG → `mppjpegdec` → NV12 有界队列 → `mpph264enc` → 本机 RTSP → MediaMTX → WebRTC → 浏览器。
-默认 1920×1080、30 fps、H.264 Baseline、4 Mbps、GOP 30；无音频。当前 NV12 在模块边界复制，尚未实现 DMA-BUF 零拷贝。
+默认 1920×1080、30 fps、H.264 Baseline、4 Mbps、GOP 30；无音频。解码 NV12 通过 DMA-BUF 共享给 AI 和编码分支；启用 OSD 时由 RGA 复制到编码专用 DMA 缓冲区，CPU 仅绘制文字，避免修改 AI 输入。
 
 - `include/media/publisher.hpp`：发布接口和配置，不暴露 GStreamer 类型。
 - `src/media/gstreamer/gst_rtsp_publisher.*`：GStreamer 管线、NV12 布局转换、时间戳、硬件编码及 RTSP 错误检测。
@@ -255,8 +255,8 @@ AI 预处理默认使用 RGA：NV12 转 RGB、缩放到模型有效区域、保�
 沿用 BT.601 limited range。`[ai] preprocess=rga|cpu` 可显式选择后端；RGA 不可用或参数不支持时
 报告 AI 故障并按既有策略重试，不静默回退 CPU。输入颜色范围或相机型号变化后需重新验证。
 
-每个检测器持有固定的 640×640 RGB 缓冲区，RGA 输出句柄只导入一次；输入帧仍来自现有普通内存，
-每次同步处理期间临时导入，不缓存已释放帧的地址。仅首次使用或输入尺寸变化时通过 RGA 清灰边，
+每个检测器持有固定的 640×640 RGB 输入缓冲区，RGA 输出句柄只导入一次；解码输入通过 fd
+导入，支持硬件行/高度对齐。仅首次使用或输入尺寸变化时通过 RGA 清灰边，
 随后复用同一输出区域。CPU 对照路径也复用 RGB 存储。两种后端共享缩放比例和补边坐标计算，
 但硬件采样和颜色舍入不保证与 CPU 逐像素一致。
 
@@ -276,14 +276,26 @@ NPU 并发由 `[ai] workers=1..3` 和 `core_policy=auto|split` 配置。仓库�
 结果只由调度线程写出，丢弃旧序号、旧相机代次及超过 700 ms 的结果，避免乱序覆盖。
 停止时取消未开始任务，等待正在执行的 RKNN 调用返回，再由所属线程释放资源。
 
-仍保留 `rknn_inputs_set` 输入路径；尚未打通 DMA-BUF 零拷贝。
-`detections.json` 中 `worker_index` 表示工作线程索引，`source_generation` 表示相机代次。
+`[ai] input_memory=dmabuf` 为默认值：使用 `rknn_create_mem2` 分配非缓存输入，通过
+`rknn_set_io_mem` 绑定，RGA 直接写入同一 fd，待同步完成后执行 NPU，不再调用 `rknn_inputs_set`。
+`input_memory=copy` 保留原 RGA RGB 普通内存提交路径，供对照；`preprocess=cpu` 始终使用拷贝提交。
+解码 DMA-BUF 为只读共享，编码关闭 OSD 时直接包装其 fd；开启 OSD 时使用最多 8 个独占 DMA32
+缓冲区，RGA 同步复制后进行 CPU 文字绘制，并成对执行 `DMA_BUF_IOCTL_SYNC`。编码器释放之前
+缓冲区不被复用，池满时丢弃本次未编码帧，避免无界增长。
+
+这条链路消除了应用层完整 NV12 的 CPU 复制及 RGA→NPU 输入提交复制；V4L2 压缩 JPEG 采集、
+JPEG appsrc 输入、NPU 输出获取仍保留现有路径，开启 OSD 仍有一次硬件复制，不声称全程零复制。
+构建额外需要 `gstreamer-allocators-1.0`，板端用户需能访问 `/dev/dma_heap/system-uncached-dma32`。
+解码器会检查实际 DMA 内存和布局，不以普通内存静默替代。共享帧的所有权及 CPU 映射封装位于
+`include/media/dma_buffer.hpp`，布局检查位于 `include/media/nv12.hpp`。
+`detections.json` 中 `worker_index` 表示工作线程索引，`source_generation` 表示相机代次；
+`source_dma` 和 `input_dma` 分别表示当前帧是否使用解码 DMA 及 RKNN 共享输入。
 `detections.json` 新增耗时字段，便于在相同视频和推理频率下对照：
 
 | 字段 | 统计范围 |
 | --- | --- |
 | `preprocess_ms` | 预处理，包括 RGA 输入导入、参数检查和同步等待 |
-| `input_ms` | `rknn_inputs_set` 输入提交 |
+| `input_ms` | 输入提交；DMA 路径初始化时已绑定，每帧该值接近零 |
 | `npu_ms` | `rknn_run` 阻塞调用，不等于纯硬件执行时间 |
 | `postprocess_ms` | 输出获取、后处理和结果组装 |
 | `inference_ms` | 上述阶段总耗时，保持原字段含义 |
@@ -295,7 +307,11 @@ NPU 并发由 `[ai] workers=1..3` 和 `core_policy=auto|split` 配置。仓库�
 ./rkmon_rga_tests /opt/rkmon/models/yolov8n.rknn /opt/rkmon/models/coco_80_labels_list.txt
 ```
 
-该测试需真实 RGA/NPU，不自动加入主机 CTest；合成帧验证不替代实际画面的识别准确率和性能测试。
+该测试需真实 RGA/NPU，不自动加入主机 CTest。还包含带高度填充的 DMA 输入、RGB DMA 输出及
+编码用 NV12 DMA 复制验证。`rkmon_gst_decoder_tests` 检查解码 DMA 的内容、关闭后保活和停止行为。
+`rkmon_dma_pipeline_tests JPEG_1920x1080 MODEL LABELS RTSP_URL` 使用一张真实 JPEG 对照
+DMA/拷贝输入的识别结果，并检查开关 OSD 的编码、共享输入不被修改。测试应使用独立 RTSP 服务，
+不要覆盖在线发布路径。有限时长验证不替代长期稳定性和完整识别准确率测试。
 暂不宣称具体加速比例。
 
 结果以原图坐标输出到 `/run/rkmon/detections.json`，原子替换文件，Nginx 通过只读 `/api/detections` 提供访问。

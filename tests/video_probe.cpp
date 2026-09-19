@@ -2,6 +2,7 @@
 #include "camera/video_capture_service.hpp"
 #include "media/services/video_process_service.hpp"
 #include <iostream>
+#include "media/nv12.hpp"
 #include <stdexcept>
 #include <thread>
 #include <sys/resource.h>
@@ -39,21 +40,25 @@ int main(int argc, char** argv) {
                 if (queue->closed()) break;
                 continue;
             }
-            if (frame->format != rkmon::camera::PixelFormat::NV12 || frame->stride != static_cast<std::size_t>(frame->width) ||
-                frame->size != static_cast<std::size_t>(frame->width) * frame->height * 3 / 2 || !frame->data) {
-                throw std::runtime_error("invalid packed NV12 layout");
-            }
+            rkmon::media::validate_nv12(*frame);
+            std::unique_ptr<rkmon::media::DmaMapping> mapping;
+            if(frame->dma)mapping=std::make_unique<rkmon::media::DmaMapping>(frame->dma);
+            const auto* pixels=mapping?mapping->data():frame->data.get();
             if (consumed && frame->sequence <= previous) throw std::runtime_error("frame sequence regressed");
             previous = frame->sequence;
             latency_ms += std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - frame->timestamp).count();
-            for (std::size_t i = 0; i < frame->size; i += 4096) checksum += frame->data[i];
-            if (!held) { held = *frame; held_byte = held->data[0]; }
+            for (std::size_t i = 0; i < frame->size; i += 4096) checksum += pixels[i];
+            if (!held) { held = *frame; held_byte = pixels[0]; }
             ++consumed;
             std::this_thread::sleep_for(std::chrono::milliseconds(delay));
         }
         decode.request_stop(); capture.request_stop();
         decode.join(); capture.join();
-        if (held && held->data[0] != held_byte) throw std::runtime_error("invalid retained frame");
+        if(held) {
+            std::unique_ptr<rkmon::media::DmaMapping> mapping;
+            if(held->dma)mapping=std::make_unique<rkmon::media::DmaMapping>(held->dma);
+            if((mapping?mapping->data():held->data.get())[0]!=held_byte)throw std::runtime_error("invalid retained frame");
+        }
         const auto stats = decode.stats();
         const auto elapsed = std::chrono::duration<double>(std::chrono::steady_clock::now() - begin).count();
         rusage usage_end{};

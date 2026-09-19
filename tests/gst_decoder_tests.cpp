@@ -1,6 +1,7 @@
 #include "media/gstreamer/gst_video_pipeline.hpp"
 #include <gst/app/gstappsink.h>
 #include <gst/gst.h>
+#include "media/nv12.hpp"
 #include <cstring>
 #include <iostream>
 #include <stdexcept>
@@ -50,13 +51,20 @@ int main() {
             check(out && out->sequence == 123 && out->timestamp == input.timestamp &&
                   out->received_at == input.received_at,
                   "source identity or receive metadata lost");
-            check(out->size == 320 * 240 * 3 / 2 && out->stride == 320, "NV12 layout incorrect");
-            for (std::size_t i = 0; i < 320 * 240; ++i) check(out->data[i] <= 20, "black Y plane corrupted");
-            for (std::size_t i = 320 * 240; i < out->size; ++i) {
-                check(out->data[i] >= 123 && out->data[i] <= 133, "neutral UV plane corrupted");
+            rkmon::media::validate_nv12(*out);
+            check(out->dma && !out->data,"decoder did not export DMA buffer");
+            {
+                rkmon::media::DmaMapping mapping(out->dma);
+                for(int y=0;y<240;++y)for(int x=0;x<320;++x)
+                    check(mapping.data()[y*out->stride+x]<=20,"black Y plane corrupted");
+                for(int y=0;y<120;++y)for(int x=0;x<320;++x) {
+                    const auto value=mapping.data()[out->uv_offset+y*out->stride+x];
+                    check(value>=123 && value<=133,"neutral UV plane corrupted");
+                }
             }
             decoder.close();
-            check(out->data[320 * 240] >= 123, "output invalid after pipeline destruction");
+            rkmon::media::DmaMapping retained(out->dma);
+            check(retained.data()[out->uv_offset]>=123,"DMA frame invalid after decoder close");
         }
         // 不完整 JPEG 不能被当作成功，必须在超时后向上报告错误。
         auto bad = input;

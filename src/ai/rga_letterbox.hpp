@@ -8,6 +8,8 @@ namespace rkmon::ai {
 class RgaLetterbox {
 public:
     explicit RgaLetterbox(int size = 640);
+    // 外部 RGB DMA-BUF 的所有者必须活到预处理器销毁之后。
+    RgaLetterbox(int size, int output_fd, std::size_t output_bytes, int width_stride);
     ~RgaLetterbox();
     RgaLetterbox(const RgaLetterbox&) = delete;
     RgaLetterbox& operator=(const RgaLetterbox&) = delete;

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "media/dma_buffer.hpp"
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
@@ -24,6 +25,10 @@ struct VideoFrame {
     // 自有只读存储，不借用已经归还驱动的 mmap 缓冲区。
     std::shared_ptr<const std::uint8_t[]> data;
     std::size_t size{0};
+    // NV12 DMA 帧使用实际行/高度对齐；data 可为空。dma 持有解码池原缓冲区。
+    std::shared_ptr<const media::DmaBuffer> dma;
+    std::size_t uv_offset{0};
+    std::size_t height_stride{0};
 };
 
 } // namespace rkmon::camera

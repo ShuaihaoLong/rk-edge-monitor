@@ -3,6 +3,8 @@
 #include <gst/app/gstappsrc.h>
 #include <gst/app/gstappsink.h>
 #include <gst/video/video.h>
+#include <gst/allocators/gstdmabuf.h>
+#include "media/nv12.hpp"
 #include <atomic>
 #include <cstring>
 #include <stdexcept>
@@ -10,16 +12,12 @@
 
 namespace rkmon::video {
 namespace {
-// 样本和映射在异常路径同样释放，输出帧不借用 GstBuffer 的内存。
+// DMA 输出帧持有 GstBuffer 引用，最后一个消费者释放后才归还解码池。
 struct Sample {
     GstSample* value;
     ~Sample() { if (value) gst_sample_unref(value); }
 };
-struct MappedFrame {
-    GstVideoFrame value{};
-    bool mapped{false};
-    ~MappedFrame() { if (mapped) gst_video_frame_unmap(&value); }
-};
+
 }
 
 struct GstVideoPipeline::Impl {
@@ -77,11 +75,12 @@ void GstVideoPipeline::open() {
     s.stop = false;
     try {
         // 每次仅一个请求在途，入口不阻塞；appsink 也限制为一帧，不允许静默丢帧。
-        // 厂商插件须显式设置 format，单独的 capsfilter 不会可靠触发 NV16→NV12。
+        // 厂商插件须显式设置 format；部分版本提供 DMA 内存却不在输出 caps 标记 DMABuf。
+        // caps 接受其特征差异，实际输出仍严格检查 GstDmaBufMemory。
         s.pipeline = gst_parse_launch(
             "appsrc name=input is-live=true format=time block=false max-buffers=1 max-bytes=0 "
-            "! jpegparse ! mppjpegdec format=NV12 "
-            "! video/x-raw,format=NV12 "
+            "! jpegparse ! mppjpegdec format=NV12 dma-feature=true "
+            "! video/x-raw(ANY),format=NV12 "
             "! appsink name=output sync=false max-buffers=1 drop=false wait-on-eos=false", &error);
         if (error || !s.pipeline) {
             const std::string reason = error ? error->message : "cannot create decoder pipeline";
@@ -149,34 +148,25 @@ std::optional<camera::VideoFrame> GstVideoPipeline::decode(const camera::VideoFr
                 GST_VIDEO_INFO_WIDTH(&info) != s.width || GST_VIDEO_INFO_HEIGHT(&info) != s.height) {
                 throw std::runtime_error("decoder output is not the requested NV12 image");
             }
-            MappedFrame mapped;
-            mapped.mapped = gst_video_frame_map(&mapped.value, &info,
-                                                gst_sample_get_buffer(sample.value), GST_MAP_READ);
-            if (!mapped.mapped) {
-                throw std::runtime_error("cannot map decoder output");
-            }
-            const auto y_size = static_cast<std::size_t>(s.width) * s.height;
-            const auto size = y_size + y_size / 2;
-            auto data = std::shared_ptr<std::uint8_t[]>(new std::uint8_t[size]);
-            // GstVideoFrame 使用实际 VideoMeta 布局，逐行去除硬件对齐填充。
-            for (unsigned plane = 0; plane < 2; ++plane) {
-                const auto stride = GST_VIDEO_FRAME_PLANE_STRIDE(&mapped.value, plane);
-                if (stride < s.width) {
-                    throw std::runtime_error("invalid NV12 plane stride");
-                }
-                const auto* src = static_cast<const std::uint8_t*>(GST_VIDEO_FRAME_PLANE_DATA(&mapped.value, plane));
-                auto* dst = data.get() + (plane == 0 ? 0 : y_size);
-                const int rows = plane == 0 ? s.height : s.height / 2;
-                for (int row = 0; row < rows; ++row) {
-                    std::memcpy(dst + static_cast<std::size_t>(row) * s.width,
-                                src + static_cast<std::size_t>(row) * stride, s.width);
-                }
-            }
-            camera::VideoFrame result = input;
-            result.format = camera::PixelFormat::NV12;
-            result.stride = s.width;
-            result.data = std::move(data);
-            result.size = size;
+            auto* decoded=gst_sample_get_buffer(sample.value);
+            auto* meta=gst_buffer_get_video_meta(decoded);
+            if(gst_buffer_n_memory(decoded)!=1 || !meta || meta->n_planes!=2)
+                throw std::runtime_error("decoder requires single DMA buffer and NV12 video metadata");
+            auto* memory=gst_buffer_peek_memory(decoded,0);
+            gsize offset=0,maxsize=0;
+            const auto bytes=gst_memory_get_sizes(memory,&offset,&maxsize);
+            if(!gst_is_dmabuf_memory(memory) || offset!=0 || meta->offset[0]!=0 ||
+               meta->stride[0]<=0 || meta->stride[0]!=meta->stride[1] ||
+               meta->offset[1]%static_cast<std::size_t>(meta->stride[0]))
+                throw std::runtime_error("unsupported decoder DMA layout");
+            std::shared_ptr<void> owner(gst_buffer_ref(decoded),[](void* ptr){gst_buffer_unref(static_cast<GstBuffer*>(ptr));});
+            camera::VideoFrame result=input;
+            result.format=camera::PixelFormat::NV12;
+            result.stride=meta->stride[0];result.uv_offset=meta->offset[1];
+            result.height_stride=result.uv_offset/result.stride;
+            result.data.reset();result.size=bytes;
+            result.dma=std::make_shared<media::DmaBuffer>(media::DmaBuffer{gst_dmabuf_memory_get_fd(memory),bytes,std::move(owner)});
+            media::validate_nv12(result);
             return result;
         }
         if (std::chrono::steady_clock::now() >= deadline) {

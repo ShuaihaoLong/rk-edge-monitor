@@ -81,6 +81,10 @@ int main() {
             }
             check(rejected, "invalid configuration was accepted or lacked file context");
         }
+        bool invalid_memory=false;
+        try {fixture.read("[ai]\ninput_memory=invalid\n");}catch(const std::runtime_error&){invalid_memory=true;}
+        check(invalid_memory,"invalid AI input memory accepted");
+        check(fixture.read("[camera]\nenabled=true\ndevice=/dev/video0\n[video]\nenabled=true\n[ai]\nenabled=true\ninput_memory=copy\n").ai->input_memory=="copy", "AI input memory option lost");
         bool missing = false;
         try { rkmon::app::load_config(fixture.dir / "missing.ini"); }
         catch (const std::runtime_error&) { missing = true; }

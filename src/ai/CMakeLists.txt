@@ -10,7 +10,7 @@ add_library(rkmon::ai ALIAS rkmon_ai)
 target_include_directories(rkmon_ai
     PUBLIC "${PROJECT_SOURCE_DIR}/include"
     PRIVATE "${PROJECT_SOURCE_DIR}/src")
-target_link_libraries(rkmon_ai PUBLIC rkmon::core)
+target_link_libraries(rkmon_ai PUBLIC rkmon::core rkmon::frame)
 target_compile_options(rkmon_ai PRIVATE -Wall -Wextra -Wpedantic)
 if(RKMON_WITH_RGA)
     find_path(RGA_INCLUDE_DIR im2d.h PATH_SUFFIXES rga REQUIRED)

@@ -21,6 +21,11 @@ public:
         handle_ = importbuffer_virtualaddr(address, size);
         if (!handle_) throw std::runtime_error("RGA virtual buffer import failed");
     }
+    void import_fd(int fd, int size) {
+        if(handle_)throw std::logic_error("RGA buffer already imported");
+        handle_=importbuffer_fd(fd,size);
+        if(!handle_)throw std::runtime_error("RGA DMA buffer import failed");
+    }
     rga_buffer_handle_t get() const noexcept { return handle_; }
 private:
     rga_buffer_handle_t handle_{};
@@ -29,11 +34,12 @@ private:
 
 struct RgaLetterbox::Impl {
     int size;
+    int width_stride;
     ModelImage image;
     // handle 必须先于 image 释放，驱动导入期间 image.rgb 不得重新分配。
     ImportedBuffer output;
     int source_width{}, source_height{};
-    explicit Impl(int value) : size(value) {}
+    explicit Impl(int value) : size(value),width_stride(value) {}
 };
 
 RgaLetterbox::RgaLetterbox(int size) : impl_(std::make_unique<Impl>(size)) {
@@ -43,6 +49,13 @@ RgaLetterbox::RgaLetterbox(int size) : impl_(std::make_unique<Impl>(size)) {
     impl_->image.rgb.resize(static_cast<std::size_t>(size) * size * 3);
     impl_->output.import(impl_->image.rgb.data(), static_cast<int>(impl_->image.rgb.size()));
 }
+RgaLetterbox::RgaLetterbox(int size,int fd,std::size_t bytes,int stride):impl_(std::make_unique<Impl>(size)) {
+    if(size<16 || size>4096 || size%16 || stride<size || stride>32768 || fd<0 ||
+       bytes<static_cast<std::size_t>(stride)*size*3 || bytes>2147483647)
+        throw std::invalid_argument("invalid RGA RGB DMA output");
+    require_status(imcheckHeader(),"header compatibility");
+    impl_->width_stride=stride;impl_->output.import_fd(fd,static_cast<int>(bytes));
+}
 RgaLetterbox::~RgaLetterbox() = default;
 
 const ModelImage& RgaLetterbox::process(const camera::VideoFrame& frame) {
@@ -50,10 +63,11 @@ const ModelImage& RgaLetterbox::process(const camera::VideoFrame& frame) {
     const auto geometry = nv12_letterbox_geometry(frame, s.size);
     // 源帧地址每次可能改变；导入仅覆盖本次同步任务，不缓存可能已被回收的地址。
     ImportedBuffer input;
-    input.import(const_cast<std::uint8_t*>(frame.data.get()), static_cast<int>(frame.size));
+    if(frame.dma)input.import_fd(frame.dma->fd,static_cast<int>(frame.size));
+    else input.import(const_cast<std::uint8_t*>(frame.data.get()), static_cast<int>(frame.size));
     auto src = wrapbuffer_handle_t(input.get(), frame.width, frame.height,
-                                   frame.width, frame.height, RK_FORMAT_YCbCr_420_SP);
-    auto dst = wrapbuffer_handle_t(s.output.get(), s.size, s.size, s.size, s.size, RK_FORMAT_RGB_888);
+                                   frame.stride, frame.dma?frame.height_stride:frame.height, RK_FORMAT_YCbCr_420_SP);
+    auto dst = wrapbuffer_handle_t(s.output.get(), s.size, s.size, s.width_stride, s.size, RK_FORMAT_RGB_888);
     dst.color_space_mode = IM_YUV_TO_RGB_BT601_LIMIT;
     const im_rect source{0, 0, frame.width, frame.height};
     const im_rect destination{geometry.x_pad, geometry.y_pad, geometry.width, geometry.height};

@@ -168,6 +168,9 @@ RuntimeConfig load_config(const std::filesystem::path& path) {
     ai.result_path = resolve(ini.take("ai.result", "../run/detections.json"));
     ai.fps = ini.integer("ai.fps", 10, 1, 60);
     ai.preprocess = ini.take("ai.preprocess", "rga");
+    ai.input_memory = ini.take("ai.input_memory", "dmabuf");
+    if(ai.input_memory!="dmabuf" && ai.input_memory!="copy")
+        throw std::runtime_error(absolute.string()+": ai.input_memory must be dmabuf or copy");
     ai.workers = ini.integer("ai.workers", 1, 1, 3);
     ai.core_policy = ini.take("ai.core_policy", "auto");
     if (ai.core_policy != "auto" && ai.core_policy != "split")

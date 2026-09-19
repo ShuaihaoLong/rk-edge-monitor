@@ -1,5 +1,7 @@
 #include "ai/rga_letterbox.hpp"
 #include "ai/inference_service.hpp"
+#include "media/rga_copy.hpp"
+#include <cstring>
 #include <algorithm>
 #include <filesystem>
 #include <fstream>
@@ -38,6 +40,31 @@ int main(int argc,char** argv) {
                 }
             }
         }
+        auto dma_frame=frame(1920,1080,16);
+        dma_frame.height_stride=1088;dma_frame.uv_offset=1920*1088;dma_frame.size=dma_frame.uv_offset*3/2;
+        auto source=media::allocate_dma_buffer(dma_frame.size);
+        {
+            media::DmaMapping mapping(source,true);
+            std::memset(mapping.data(),16,dma_frame.uv_offset);
+            std::memset(mapping.data()+dma_frame.uv_offset,128,dma_frame.uv_offset/2);
+            mapping.finish();
+        }
+        dma_frame.dma=source;dma_frame.data.reset();
+        auto destination=media::allocate_dma_buffer(640*640*3);
+        ai::RgaLetterbox dma_rga(640,destination->fd,destination->size,640);
+        dma_rga.process(dma_frame);
+        {
+            media::DmaMapping mapping(destination);
+            check(mapping.data()[0]==114,"DMA padding incorrect");
+            check(mapping.data()[320*640*3]<=2,"DMA RGB conversion incorrect");
+        }
+        auto copied=media::allocate_dma_buffer(dma_frame.size);
+        media::rga_copy_nv12(dma_frame,*copied,1920,1088);
+        {
+            media::DmaMapping mapping(copied);
+            check(mapping.data()[0]==16 && mapping.data()[dma_frame.uv_offset]==128,"DMA NV12 copy incorrect");
+        }
+        std::cout<<"DMA padded NV12 input, RGB output and encoder NV12 copy passed\n";
         std::cout<<"RGA padding, RGB conversion, geometry changes and buffer reuse passed\n";
         if(argc==3) {
             char path[]="/tmp/rkmon-rga-test.XXXXXX";check(mkdtemp(path),"mkdtemp failed");folder=path;
@@ -47,14 +74,14 @@ int main(int argc,char** argv) {
             std::vector<std::unique_ptr<ai::IObjectDetector>> detectors;
             for(unsigned i=0;i<3;++i)detectors.push_back(ai::make_detector(config,i));
             ai::InferenceService service(std::move(detectors),queue,config);service.start();
-            auto f=frame(1920,1080,16);std::set<unsigned> seen;
+            auto f=dma_frame;std::set<unsigned> seen;
             const auto end=std::chrono::steady_clock::now()+std::chrono::seconds(8);
             while(std::chrono::steady_clock::now()<end) {
                 f.timestamp=std::chrono::steady_clock::now();++f.sequence;
                 queue->try_push(f,core::OverflowPolicy::drop_oldest);
                 std::this_thread::sleep_for(std::chrono::milliseconds(20));
                 std::ifstream file(config.result_path);std::string json{std::istreambuf_iterator<char>(file),{}};
-                if(json.find("\"status\":\"ok\"")!=std::string::npos)
+                if(json.find("\"status\":\"ok\"")!=std::string::npos && json.find("\"input_dma\":true")!=std::string::npos && json.find("\"source_dma\":true")!=std::string::npos)
                     for(unsigned i=0;i<3;++i)if(json.find("\"worker_index\":"+std::to_string(i))!=std::string::npos)seen.insert(i);
             }
             service.stop();check(seen.size()==3,"not all three NPU workers produced valid results");
