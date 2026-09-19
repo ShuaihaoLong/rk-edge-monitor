@@ -298,7 +298,10 @@ class Store:
         # 每次请求限制在当前已完成文件内；前端在结束后按索引续播。
         length = min(duration,(row['end_ms']-stamp)/1000)
         query = urlencode(dict(path='camera',start=dt.datetime.fromtimestamp(stamp/1000,UTC).isoformat(),duration=f'{length:.3f}',format='mp4'))
-        return dict(url='/recording-media/get?'+query,start_ms=stamp,end_ms=stamp+round(length*1000),recording_id=row['id'])
+        offset = max(0,(stamp-row['start_ms'])/1000)
+        return dict(url='/recording-media/get?'+query,
+                media_url=f'/api/recordings/{row["id"]}/media#t={offset:.3f}',
+                start_ms=stamp,end_ms=stamp+round(length*1000),recording_id=row['id'])
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -330,6 +333,18 @@ class Handler(BaseHTTPRequestHandler):
                 result = sorted(days,reverse=True)
             elif parsed.path == '/api/playback':
                 result = store.playback(int(query['start'][0]),float(query.get('duration',['60'])[0]))
+            elif parsed.path.startswith('/api/recordings/') and parsed.path.endswith('/media'):
+                identifier = int(parsed.path.split('/')[3])
+                with store.connect() as db:
+                    row = db.execute("SELECT * FROM recordings WHERE id=? AND status IN ('ready','recovered')",(identifier,)).fetchone()
+                if not row or not store.safe_file(row['path']).is_file():
+                    raise FileNotFoundError('录像已删除')
+                self.send_response(200)
+                self.send_header('Content-Type','video/mp4')
+                self.send_header('Cache-Control','no-store')
+                self.send_header('X-Accel-Redirect','/_recordings/'+quote(row['path'],safe='/'))
+                self.end_headers()
+                return
             elif parsed.path.startswith('/api/recordings/') and parsed.path.endswith('/download'):
                 identifier = int(parsed.path.split('/')[3])
                 with store.connect() as db:

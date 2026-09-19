@@ -35,7 +35,7 @@
       days.forEach(d=>dayList.add(new Option(d,d)));dayList.value=date.value;
       $('recording-count').textContent=`${data.recordings.length} 个可播放片段`;
       const list=$('recording-list');list.replaceChildren();
-      data.recordings.forEach(r=>{
+      [...data.recordings].reverse().forEach(r=>{
         const item=document.createElement('li'),button=document.createElement('button'),download=document.createElement('a');
         button.textContent=`${clock(r.start_ms)} · ${Math.round(r.duration)} 秒`;
         button.onclick=()=>play(r.start_ms);
@@ -64,7 +64,7 @@
     try {
       const selected=await api(`/api/playback?start=${Math.round(stamp)}&duration=60`);
       if(token!==playbackToken)return;
-      windowInfo=selected;video.src=selected.url;video.playbackRate=Number($('recording-speed').value);
+      windowInfo=selected;video.src=selected.media_url;video.playbackRate=Number($('recording-speed').value);
       $('selected-time').textContent=clock(selected.start_ms);
       message('正在回放');
       try {await video.play();}catch(error){if(error.name!=='AbortError')message('录像已加载，点击播放按钮开始。');}
@@ -75,8 +75,20 @@
     if(!data)return;const bounds=event.currentTarget.getBoundingClientRect();
     select(data.start_ms+Math.min(.999999,Math.max(0,(event.clientX-bounds.left)/bounds.width))*(data.end_ms-data.start_ms));
   };
-  seek.oninput=()=>{dragging=true;if(data)$('selected-time').textContent=clock(data.start_ms+Number(seek.value)*1000);};
-  seek.onchange=()=>{dragging=false;if(data)select(data.start_ms+Number(seek.value)*1000);};
+  let pointerSeekCommitted=false;
+  const previewSeek=()=>{if(data)$('selected-time').textContent=clock(data.start_ms+Number(seek.value)*1000);};
+  const commitSeek=()=>{if(data)select(data.start_ms+Number(seek.value)*1000);};
+  seek.onpointerdown=()=>{dragging=true;pointerSeekCommitted=false;};
+  seek.oninput=previewSeek;
+  seek.onpointerup=()=>{
+    if(!dragging)return;
+    dragging=false;pointerSeekCommitted=true;commitSeek();
+  };
+  seek.onpointercancel=()=>{dragging=false;};
+  seek.onchange=()=>{
+    if(pointerSeekCommitted){pointerSeekCommitted=false;return;}
+    dragging=false;commitSeek();
+  };
   video.ontimeupdate=()=>{
     if(!windowInfo)return;const stamp=windowInfo.start_ms+video.currentTime*1000;
     $('recording-clock').textContent=clock(stamp);
