@@ -202,10 +202,10 @@ bash script/deploy.sh --host elf@192.168.100.11 --jobs 4
 ```text
 /opt/rkmon                         程序、网页、配置和 Python 服务
 /userdata/rkmon-video             MP4 录像和 index.sqlite3，不随升级删除
-/opt/rkmon-backup.*               每次安装生成的旧文件备份
+/opt/rkmon-backup.*               仅保留一个上一版本的旧文件备份
 ```
 
-部署会短暂停流，覆盖 `/opt/rkmon` 下的项目配置和网页，但不会覆盖 `/userdata/rkmon-video`。板端 `sudo` 可能交互询问密码；密码不会写入脚本或日志。
+部署会短暂停流，覆盖 `/opt/rkmon` 下的项目配置和网页，但不会覆盖 `/userdata/rkmon-video`。每次成功部署都会用当前版本生成一个新的上一版本备份，并删除更早的备份；如果备份生成失败，则保留已有备份。板端 `sudo` 可能交互询问密码；密码不会写入脚本或日志。
 
 ## 6. 运行和访问
 

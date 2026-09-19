@@ -38,6 +38,11 @@ backup_dir=$(mktemp -d /opt/rkmon-backup.XXXXXXXX)
 for path in /opt/rkmon /etc/nginx/sites-available/rkmon /etc/nginx/sites-enabled/rkmon /etc/mosquitto/conf.d/rkmon.conf /etc/systemd/system/rkmon.service /etc/systemd/system/mediamtx.service /etc/systemd/system/rkmon-recording.service; do
     if [[ -e $path || -L $path ]]; then cp -a --parents "$path" "$backup_dir/"; fi
 done
+# 新备份已完整生成后，只保留它作为下一次回滚点；备份失败时保留旧备份。
+for old_backup in /opt/rkmon-backup.*; do
+    [[ $old_backup == "$backup_dir" || ! -d $old_backup ]] && continue
+    rm -rf -- "$old_backup"
+done
 systemctl stop rkmon.service mediamtx.service rkmon-recording.service 2>/dev/null || true
 install -d -m 755 /opt/rkmon/lib/recording /opt/rkmon/bin /opt/rkmon/config /opt/rkmon/web /opt/rkmon/models /opt/rkmon/licenses
 install -d -m 755 -o elf -g "$(id -gn elf)" /opt/rkmon/logs
