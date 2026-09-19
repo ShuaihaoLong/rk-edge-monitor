@@ -167,6 +167,9 @@ RuntimeConfig load_config(const std::filesystem::path& path) {
     ai.labels_path = resolve(ini.take("ai.labels", "../models/coco_80_labels_list.txt"));
     ai.result_path = resolve(ini.take("ai.result", "../run/detections.json"));
     ai.fps = ini.integer("ai.fps", 10, 1, 60);
+    ai.preprocess = ini.take("ai.preprocess", "rga");
+    if (ai.preprocess != "rga" && ai.preprocess != "cpu")
+        throw std::runtime_error(absolute.string() + ": ai.preprocess must be rga or cpu");
     if (ai_enabled) {
         if (!config.video) throw std::runtime_error(absolute.string() + ": AI requires video.enabled=true");
         config.ai = ai;

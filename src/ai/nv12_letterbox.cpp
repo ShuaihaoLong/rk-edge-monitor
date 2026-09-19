@@ -3,16 +3,26 @@
 #include <cmath>
 #include <stdexcept>
 namespace rkmon::ai {
-ModelImage nv12_letterbox(const camera::VideoFrame& f, int size) {
+LetterboxGeometry nv12_letterbox_geometry(const camera::VideoFrame& f, int size) {
     if (size <= 0 || size > 4096 || f.width <= 0 || f.height <= 0 || f.width > 16384 || f.height > 16384 ||
         f.width%2 || f.height%2 || f.format != camera::PixelFormat::NV12 || !f.data ||
         f.stride != static_cast<std::size_t>(f.width) || f.size != static_cast<std::size_t>(f.width)*f.height*3/2)
         throw std::invalid_argument("AI requires tightly packed NV12");
+    const float scale=std::min(float(size)/f.width,float(size)/f.height);
+    const int w=std::max(1,int(std::round(f.width*scale))), h=std::max(1,int(std::round(f.height*scale)));
+    return {scale,w,h,(size-w)/2,(size-h)/2};
+}
+ModelImage nv12_letterbox(const camera::VideoFrame& f, int size) {
     ModelImage out;
-    out.scale=std::min(float(size)/f.width,float(size)/f.height);
-    const int w=std::max(1,int(std::round(f.width*out.scale))), h=std::max(1,int(std::round(f.height*out.scale)));
-    out.x_pad=(size-w)/2; out.y_pad=(size-h)/2;
-    out.rgb.assign(static_cast<std::size_t>(size)*size*3,114);
+    nv12_letterbox(f,out,size);
+    return out;
+}
+void nv12_letterbox(const camera::VideoFrame& f, ModelImage& out, int size) {
+    const auto geometry=nv12_letterbox_geometry(f,size);
+    const auto w=geometry.width, h=geometry.height;
+    out.scale=geometry.scale;out.x_pad=geometry.x_pad;out.y_pad=geometry.y_pad;
+    out.rgb.resize(static_cast<std::size_t>(size)*size*3);
+    std::fill(out.rgb.begin(),out.rgb.end(),114);
     const auto* yplane=f.data.get();
     const auto* uv=yplane+static_cast<std::size_t>(f.width)*f.height;
     auto sample=[](const std::uint8_t* p,int width,int height,float x,float y,int step,int offset) {
@@ -32,6 +42,5 @@ ModelImage nv12_letterbox(const camera::VideoFrame& f, int size) {
         dst[1]=std::clamp(int(std::round(l-0.391762f*u-0.812968f*v)),0,255);
         dst[2]=std::clamp(int(std::round(l+2.017232f*u)),0,255);
     }
-    return out;
 }
 }

@@ -17,6 +17,7 @@ struct DetectionResult {
     std::chrono::steady_clock::time_point source_time{};
     int width{}, height{};
     double inference_ms{};
+    double preprocess_ms{}, input_ms{}, npu_ms{}, postprocess_ms{};
     std::vector<Detection> objects;
 };
 // 单线程拥有检测器；close 必须在 detect 返回后执行，不与 NPU 调用并发。

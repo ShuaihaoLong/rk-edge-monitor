@@ -29,7 +29,11 @@ void ResultWriter::write(const std::string& status,const DetectionResult* r) {
          << ",\"status\":" << quote(status) << ",\"sequence\":" << (r?r->sequence:0)
          << ",\"width\":" << (r?r->width:0) << ",\"height\":" << (r?r->height:0)
          << ",\"age_ms\":" << (r?std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now()-r->source_time).count():0)
-         << ",\"inference_ms\":" << (r?r->inference_ms:0) << ",\"objects\":[";
+         << ",\"inference_ms\":" << (r?r->inference_ms:0)
+         << ",\"preprocess_ms\":" << (r?r->preprocess_ms:0)
+         << ",\"input_ms\":" << (r?r->input_ms:0)
+         << ",\"npu_ms\":" << (r?r->npu_ms:0)
+         << ",\"postprocess_ms\":" << (r?r->postprocess_ms:0) << ",\"objects\":[";
     if(r)for(std::size_t i=0;i<r->objects.size();++i) {
         const auto& d=r->objects[i];if(i)file << ',';
         file << "{\"class_id\":" << d.class_id << ",\"label\":" << quote(d.label)

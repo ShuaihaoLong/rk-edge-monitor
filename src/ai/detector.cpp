@@ -1,7 +1,11 @@
 #include "rknn_detector.hpp"
 #include "ai/nv12_letterbox.hpp"
+#ifdef RKMON_WITH_RGA
+#include "ai/rga_letterbox.hpp"
+#endif
 #include "yolov8.h"
 #include <algorithm>
+#include <array>
 #include <fstream>
 #include <iterator>
 #include <stdexcept>
@@ -10,7 +14,7 @@ namespace {
 void require(bool value,const char* reason) { if(!value) throw std::runtime_error(reason); }
 struct OutputGuard {
     rknn_context context;
-    std::vector<rknn_output> outputs{9};
+    std::array<rknn_output,9> outputs{};
     bool acquired{false};
     ~OutputGuard() { if(acquired) rknn_outputs_release(context,outputs.size(),outputs.data()); }
 };
@@ -21,16 +25,28 @@ struct RknnDetector::Impl {
     rknn_tensor_attr input{};
     std::vector<rknn_tensor_attr> attrs{9};
     std::vector<std::string> labels;
+    ModelImage cpu_image;
+#ifdef RKMON_WITH_RGA
+    std::unique_ptr<RgaLetterbox> rga;
+#endif
 };
 RknnDetector::RknnDetector(InferenceConfig c):impl_(std::make_unique<Impl>()) { impl_->config=std::move(c); }
 RknnDetector::~RknnDetector() { close(); }
 void RknnDetector::close() noexcept {
+#ifdef RKMON_WITH_RGA
+    impl_->rga.reset();
+#endif
+    impl_->cpu_image={};
     if(impl_->app.rknn_ctx) rknn_destroy(impl_->app.rknn_ctx);
     impl_->app={}; impl_->labels.clear();
 }
 void RknnDetector::open() {
     close(); auto& s=*impl_;
     try {
+        require(s.config.preprocess=="rga" || s.config.preprocess=="cpu","invalid AI preprocess backend");
+#ifndef RKMON_WITH_RGA
+        require(s.config.preprocess!="rga","RGA preprocessing requires RKMON_WITH_RGA=ON");
+#endif
         std::ifstream file(s.config.model_path,std::ios::binary);
         require(file.good(),"cannot open RKNN model");
         std::vector<char> model((std::istreambuf_iterator<char>(file)),{});
@@ -55,23 +71,40 @@ void RknnDetector::open() {
         std::ifstream labels(s.config.labels_path);std::string line;
         while(std::getline(labels,line)) { if(!line.empty() && line.back()=='\r')line.pop_back();s.labels.push_back(line); }
         require(s.labels.size()==80,"expected 80 class labels");
+#ifdef RKMON_WITH_RGA
+        if(s.config.preprocess=="rga")s.rga=std::make_unique<RgaLetterbox>(s.app.model_width);
+#endif
+        if(s.config.preprocess=="cpu")s.cpu_image.rgb.reserve(static_cast<std::size_t>(s.app.model_width)*s.app.model_height*3);
     } catch(...) { close();throw; }
 }
 DetectionResult RknnDetector::detect(const camera::VideoFrame& frame) {
     auto& s=*impl_;require(s.app.rknn_ctx!=0,"detector is closed");
-    const auto start=std::chrono::steady_clock::now();
-    auto image=nv12_letterbox(frame);
+    using Clock=std::chrono::steady_clock;
+    const auto start=Clock::now();
+    const ModelImage* image=nullptr;
+#ifdef RKMON_WITH_RGA
+    if(s.rga)image=&s.rga->process(frame);
+    else
+#endif
+    {
+        nv12_letterbox(frame,s.cpu_image,s.app.model_width);
+        image=&s.cpu_image;
+    }
+    const auto preprocessed=Clock::now();
     rknn_input tensor{};tensor.type=RKNN_TENSOR_UINT8;tensor.fmt=RKNN_TENSOR_NHWC;
-    tensor.buf=image.rgb.data();tensor.size=image.rgb.size();
+    // RKNN 的输入接口使用 void*，同步调用期间预处理结果保持存活且不被覆盖。
+    tensor.buf=const_cast<std::uint8_t*>(image->rgb.data());tensor.size=image->rgb.size();
     require(rknn_inputs_set(s.app.rknn_ctx,1,&tensor)==0,"rknn_inputs_set failed");
+    const auto input_ready=Clock::now();
     // Runtime 的阻塞超时限制停止等待；调用返回后才能释放上下文。
     rknn_run_extend run{};run.timeout_ms=1000;
     require(rknn_run(s.app.rknn_ctx,&run)==0,"rknn_run failed or timed out");
+    const auto inferred=Clock::now();
     OutputGuard output{s.app.rknn_ctx};
     for(unsigned i=0;i<9;++i)output.outputs[i].index=i;
     require(rknn_outputs_get(s.app.rknn_ctx,9,output.outputs.data(),nullptr)==0,"rknn_outputs_get failed");
     output.acquired=true;
-    object_detect_result_list objects{};letterbox_t letterbox{image.x_pad,image.y_pad,image.scale};
+    object_detect_result_list objects{};letterbox_t letterbox{image->x_pad,image->y_pad,image->scale};
     require(post_process(&s.app,output.outputs.data(),&letterbox,0.25f,0.45f,&objects)==0,"postprocess failed");
     DetectionResult result;result.sequence=frame.sequence;result.source_time=frame.timestamp;
     result.width=frame.width;result.height=frame.height;
@@ -83,7 +116,12 @@ DetectionResult RknnDetector::detect(const camera::VideoFrame& frame) {
             std::clamp(d.box.right,0,frame.width),std::clamp(d.box.bottom,0,frame.height)};
         if(box.right>box.left && box.bottom>box.top)result.objects.push_back(std::move(box));
     }
-    result.inference_ms=std::chrono::duration<double,std::milli>(std::chrono::steady_clock::now()-start).count();
+    const auto finished=Clock::now();
+    result.preprocess_ms=std::chrono::duration<double,std::milli>(preprocessed-start).count();
+    result.input_ms=std::chrono::duration<double,std::milli>(input_ready-preprocessed).count();
+    result.npu_ms=std::chrono::duration<double,std::milli>(inferred-input_ready).count();
+    result.postprocess_ms=std::chrono::duration<double,std::milli>(finished-inferred).count();
+    result.inference_ms=std::chrono::duration<double,std::milli>(finished-start).count();
     return result;
 }
 }
