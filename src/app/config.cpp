@@ -146,6 +146,10 @@ RuntimeConfig load_config(const std::filesystem::path& path) {
     stream.bitrate = ini.integer("stream.bitrate", 4000000, 100000, 100000000);
     stream.gop = ini.integer("stream.gop", 30, 1, 1000);
     stream.timeout_ms = ini.integer("stream.timeout_ms", 5000, 100, 60000);
+    stream.osd_enabled = ini.boolean("stream.osd_enabled", true);
+    stream.osd_timezone = ini.take("stream.osd_timezone", "Asia/Shanghai");
+    if (stream.osd_timezone != "Asia/Shanghai" && stream.osd_timezone != "UTC" && stream.osd_timezone != "local")
+        throw std::runtime_error(absolute.string() + ": stream.osd_timezone must be Asia/Shanghai, UTC or local");
     if (stream_enabled) {
         if (!config.video) {
             throw std::runtime_error(absolute.string() + ": streaming requires video.enabled=true");

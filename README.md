@@ -94,6 +94,21 @@ bash script/start.sh --binary /path/to/rkmon --config /path/to/rkmon.ini
 
 第一版每次一个 JPEG 请求在途。压缩输入复制到 GstBuffer，硬解输出通过 GstVideoFrame 的实际 stride/平面信息逐行复制为紧密排列 NV12：Y 偏移 0，UV 偏移 width×height，stride=width，大小 width×height×3/2。输出保留来源 sequence/timestamp；超时立即升级为故障，避免迟到帧与新请求错配。该实现优先保证生命周期清楚，不是零拷贝。
 
+视频帧在 V4L2 `DQBUF` 成功后、图像复制前记录主控收帧时间：`timestamp` 使用单调时钟，
+用于耗时和视频 PTS；`received_at` 使用系统时钟，供日期水印使用。解码沿用原帧的两种时间，
+不会用解码完成时间覆盖；主控收帧时间不等同于相机曝光时间。
+
+编码前在左上角叠加该帧的收帧日期时间和 `CAP FPS`。帧率在采集端以单调时钟按约一秒窗口
+统计成功收到的帧，随帧传递，不使用配置 FPS；启动尚无完整统计窗口时显示 `--`。
+`[stream] osd_enabled=true` 默认启用；`osd_timezone=Asia/Shanghai` 显示北京时间并标注 `UTC+0800`，
+也可选 `UTC` 或 `local`（板端系统时区）。不会修改板端时区或系统时间。
+文字直接绘制在编码器原有复制缓冲区的 NV12 小区域内，无 OpenCV、无额外整帧复制或 RGB 转换，
+AI 分支共享的原始帧不受影响。水印进入编码视频，积压或冻结时显示的仍是对应帧的收帧时间。
+
+2026-09-19 临时停止 `rkmon` 后对当前 SYD USB 相机采样 12 帧，V4L2 报告
+`ts-monotonic, ts-src-soe`，即单调时钟、驱动标注曝光开始来源，短采样约 30 FPS。
+这确认驱动提供时间戳及来源标志，不是对传感器曝光时间精度的独立校准；当前水印仍采用主控收帧时间。
+
 `RKMON_WITH_GSTREAMER` 在 aarch64 默认开启，主机默认关闭，主机服务测试不需要安装 GStreamer。开启时要求 sysroot 提供 GStreamer/app/video >= 1.20。显式切换可用 `cmake -S . -B build/host -DRKMON_WITH_GSTREAMER=OFF`；构建脚本会保留已有缓存选择。
 
 板端有限时长验证（不保存图像）：

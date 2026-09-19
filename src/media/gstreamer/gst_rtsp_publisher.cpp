@@ -1,4 +1,5 @@
 #include "media/gstreamer/gst_rtsp_publisher.hpp"
+#include "media/osd.hpp"
 #include <gst/app/gstappsrc.h>
 #include <gst/video/video.h>
 #include <atomic>
@@ -147,6 +148,7 @@ void GstRtspPublisher::write(const camera::VideoFrame& frame) {
         throw std::runtime_error("publisher input format changed or timestamp regressed");
     }
     s.previous = frame.timestamp;
+    const auto text = s.config.osd_enabled ? osd_text(frame, s.config.osd_timezone) : std::array<std::string, 2>{};
     auto* buffer = gst_buffer_new_allocate(nullptr, s.info.size, nullptr);
     if (!buffer) throw std::bad_alloc();
     GstMapInfo mapping{};
@@ -164,6 +166,10 @@ void GstRtspPublisher::write(const camera::VideoFrame& frame) {
             std::memcpy(dst + static_cast<std::size_t>(row) * s.info.stride[plane],
                         src + static_cast<std::size_t>(row) * width, width);
         }
+    }
+    if (s.config.osd_enabled) {
+        draw_osd(mapping.data + s.info.offset[0], s.info.stride[0],
+                 mapping.data + s.info.offset[1], s.info.stride[1], width, height, text);
     }
     gst_buffer_unmap(buffer, &mapping);
     GST_BUFFER_PTS(buffer) = std::chrono::duration_cast<std::chrono::nanoseconds>(frame.timestamp - s.origin).count();

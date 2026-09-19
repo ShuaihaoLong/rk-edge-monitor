@@ -43,6 +43,7 @@ int main() {
             "[video]\nenabled=true\n[stream]\nenabled=true\nbitrate=2000000\ngop=25\n");
         check(streaming.stream && streaming.stream->fps == 25 && streaming.stream->bitrate == 2000000,
               "stream settings not loaded");
+        check(streaming.stream->osd_enabled && streaming.stream->osd_timezone == "Asia/Shanghai", "OSD defaults wrong");
         check(!fixture.read("[stream]\nenabled=false\n").stream, "disabled publisher instantiated");
         auto ai_config = fixture.read("[camera]\nenabled=true\ndevice=/dev/video0\n[video]\nenabled=true\n[ai]\nenabled=true\nmodel=../models/test.rknn\nfps=8\n");
         check(ai_config.ai && ai_config.ai->fps == 8 &&
@@ -55,6 +56,7 @@ int main() {
               stm32_config.stm32->baud_rate == 115200, "STM32 settings not loaded");
         check(!fixture.read("[stm32]\nenabled=false\n").stm32, "disabled STM32 instantiated");
         for (const std::string text : {
+            "[stream]\nosd_enabled=maybe\n", "[stream]\nosd_timezone=unknown\n",
             "[stm32]\nenabled=true\n", "[stm32]\nbaud_rate=12345\n", "[stm32]\nframe_timeout_ms=0\n",
             "[mqtt]\nenabled=true\ndevice_id=ok\n[stm32]\nenabled=true\ndevice=\n",
             "[ai]\nenabled=true\n", "[ai]\nfps=0\n", "[ai]\nfps=61\n",

@@ -224,6 +224,8 @@ ReadResult V4L2VideoSource::read() {
                 }
                 throw std::system_error(errno, std::generic_category(), "VIDIOC_DQBUF");
             }
+            const auto received_monotonic = std::chrono::steady_clock::now();
+            const auto received_at = std::chrono::system_clock::now();
             if (buffer.index >= mappings_.size()) {
                 throw std::runtime_error("invalid driver buffer index");
             }
@@ -241,7 +243,8 @@ ReadResult V4L2VideoSource::read() {
                     frame.height = actual_.height;
                     frame.format = actual_.format;
                     frame.stride = actual_.stride;
-                    frame.timestamp = std::chrono::steady_clock::now();
+                    frame.timestamp = received_monotonic;
+                    frame.received_at = received_at;
                     frame.data = std::move(data);
                     frame.size = buffer.bytesused;
                 }

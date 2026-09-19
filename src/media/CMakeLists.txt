@@ -4,7 +4,7 @@ if(CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64")
 endif()
 option(RKMON_WITH_GSTREAMER "Build Rockchip GStreamer hardware decoder and publisher" ${_gst_default})
 
-add_library(rkmon_video STATIC services/video_process_service.cpp factory.cpp
+add_library(rkmon_video STATIC services/video_process_service.cpp factory.cpp osd.cpp
     services/video_stream_service.cpp)
 add_library(rkmon::video ALIAS rkmon_video)
 target_include_directories(rkmon_video

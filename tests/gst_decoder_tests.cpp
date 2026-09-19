@@ -35,6 +35,8 @@ rkmon::camera::VideoFrame black_jpeg() {
     input.height = 240;
     input.sequence = 123;
     input.timestamp = std::chrono::steady_clock::now();
+    input.received_at = std::chrono::system_clock::now();
+    input.capture_fps = 29.5;
     return input;
 }
 }
@@ -46,7 +48,9 @@ int main() {
         for (int round = 0; round < 2; ++round) {
             decoder.open();
             auto out = decoder.decode(input);
-            check(out && out->sequence == 123 && out->timestamp == input.timestamp, "source identity lost");
+            check(out && out->sequence == 123 && out->timestamp == input.timestamp &&
+                  out->received_at == input.received_at && out->capture_fps == input.capture_fps,
+                  "source identity or receive metadata lost");
             check(out->size == 320 * 240 * 3 / 2 && out->stride == 320, "NV12 layout incorrect");
             for (std::size_t i = 0; i < 320 * 240; ++i) check(out->data[i] <= 20, "black Y plane corrupted");
             for (std::size_t i = 320 * 240; i < out->size; ++i) {

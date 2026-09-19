@@ -11,6 +11,8 @@ struct StreamConfig {
     unsigned fps{30};
     unsigned gop{30};
     unsigned timeout_ms{5000};
+    bool osd_enabled{true};
+    std::string osd_timezone{"Asia/Shanghai"};
 };
 
 // 接收自有 NV12 帧；编码和传输由实现负责，服务层不接触媒体协议类型。
