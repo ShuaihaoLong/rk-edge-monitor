@@ -43,11 +43,15 @@ bash "$script_dir/package-monitor.sh" --archive "$archive"
 remote_dir=$(ssh "${ssh_options[@]}" "$host" 'mktemp -d /tmp/rkmon-upload.XXXXXXXX')
 [[ $remote_dir =~ ^/tmp/rkmon-upload\.[a-zA-Z0-9]+$ ]] || { echo '错误：远程临时目录无效' >&2; exit 1; }
 cleanup() {
-    ssh "${ssh_options[@]}" "$host" "rm -rf -- '$remote_dir'" || echo "提示：请手动清理 $remote_dir" >&2
+    # 安装脚本由 sudo 执行，可能在上传目录生成 root 所有的 __pycache__ 文件。
+    if ssh "${ssh_options[@]}" "$host" "rm -rf -- '$remote_dir'" 2>/dev/null; then
+        return
+    fi
+    ssh -tt "${ssh_options[@]}" "$host" "sudo rm -rf -- '$remote_dir'" || echo "提示：请手动清理 $remote_dir" >&2
 }
 trap cleanup EXIT
 ssh "${ssh_options[@]}" "$host" "tar -xzf - -C '$remote_dir'" < "$project_dir/build/deploy/rkmon-deploy.tar.gz"
-# 分配终端交给 sudo 交互；已有免密 sudo 时可直接完成。
-ssh -tt "${ssh_options[@]}" "$host" "sudo bash '$remote_dir/rkmon-deploy/script/install-monitor.sh'"
+# 安装和清理放在同一条 sudo 会话中，避免 root 生成的 __pycache__ 留在上传目录。
+ssh -tt "${ssh_options[@]}" "$host" "sudo bash '$remote_dir/rkmon-deploy/script/install-monitor.sh'; install_status=\$?; sudo rm -rf -- '$remote_dir'; exit \$install_status"
 ssh "${ssh_options[@]}" "$host" 'sleep 3; systemctl is-active --quiet rkmon && systemctl is-active --quiet mediamtx && systemctl is-active --quiet rkmon-recording && systemctl is-active --quiet mosquitto && systemctl is-active --quiet nginx && curl --noproxy "*" --fail --silent --output /dev/null --max-time 5 http://127.0.0.1:9000/ && curl --noproxy "*" --fail --silent --output /dev/null --max-time 5 http://127.0.0.1:9000/api/recordings/status'
 echo '部署完成：服务运行且监控页面返回成功。请在浏览器确认实际画面。'
