@@ -25,7 +25,7 @@ actual=$(sha256sum -- "$archive")
 staging=$(mktemp -d)
 trap 'rm -rf -- "$staging"' EXIT
 payload=$staging/rkmon-deploy
-mkdir -p "$payload/"{bin,config/systemd,script,models,licenses,packages}
+mkdir -p "$payload/"{bin,lib/recording,config/systemd,script,models,licenses,packages}
 # 模型与配套标签随程序一起更新，拒绝未知版本的模型。
 model=$project_dir/.local/ai-stage4/yolov8n.rknn
 model_digest=$(sha256sum -- "$model")
@@ -42,8 +42,9 @@ cp "$package_dir/"*.deb "$payload/packages/"
 )
 tar -xzf "$archive" -C "$payload/bin" mediamtx
 cp "$project_dir/build/rk3588/src/app/rkmon" "$payload/bin/"
-cp "$project_dir/config/"{rkmon.ini,mediamtx.yml,nginx-monitor.conf,mosquitto-rkmon.conf} "$payload/config/"
-cp "$project_dir/config/systemd/"{rkmon,mediamtx}.service "$payload/config/systemd/"
+cp "$project_dir/config/"{rkmon.ini,recording.ini,mediamtx.yml,nginx-monitor.conf,mosquitto-rkmon.conf} "$payload/config/"
+cp "$project_dir/config/systemd/"{rkmon,mediamtx,rkmon-recording}.service "$payload/config/systemd/"
+cp "$project_dir/src/recording/"{service,notify}.py "$payload/lib/recording/"
 cp -R "$project_dir/web" "$payload/"
 cp "$script_dir/install-monitor.sh" "$payload/script/"
 mkdir -p "$project_dir/build/deploy"

@@ -1,12 +1,14 @@
 [Unit]
 Description=MediaMTX local WebRTC media server
-After=network-online.target
-Wants=network-online.target
+After=network-online.target rkmon-recording.service
+RequiresMountsFor=/userdata/rkmon-video
+Wants=network-online.target rkmon-recording.service
 StartLimitIntervalSec=0
 
 [Service]
 Type=simple
 User=elf
+Environment=TZ=UTC
 WorkingDirectory=/opt/rkmon
 ExecStart=/opt/rkmon/bin/mediamtx /opt/rkmon/config/mediamtx.yml
 Restart=on-failure

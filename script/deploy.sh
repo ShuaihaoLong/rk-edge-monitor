@@ -49,5 +49,5 @@ trap cleanup EXIT
 ssh "${ssh_options[@]}" "$host" "tar -xzf - -C '$remote_dir'" < "$project_dir/build/deploy/rkmon-deploy.tar.gz"
 # 分配终端交给 sudo 交互；已有免密 sudo 时可直接完成。
 ssh -tt "${ssh_options[@]}" "$host" "sudo bash '$remote_dir/rkmon-deploy/script/install-monitor.sh'"
-ssh "${ssh_options[@]}" "$host" 'sleep 3; systemctl is-active --quiet rkmon && systemctl is-active --quiet mediamtx && systemctl is-active --quiet mosquitto && systemctl is-active --quiet nginx && curl --noproxy "*" --fail --silent --output /dev/null --max-time 5 http://127.0.0.1:9000/'
+ssh "${ssh_options[@]}" "$host" 'sleep 3; systemctl is-active --quiet rkmon && systemctl is-active --quiet mediamtx && systemctl is-active --quiet rkmon-recording && systemctl is-active --quiet mosquitto && systemctl is-active --quiet nginx && curl --noproxy "*" --fail --silent --output /dev/null --max-time 5 http://127.0.0.1:9000/ && curl --noproxy "*" --fail --silent --output /dev/null --max-time 5 http://127.0.0.1:9000/api/recordings/status'
 echo '部署完成：服务运行且监控页面返回成功。请在浏览器确认实际画面。'

@@ -371,3 +371,49 @@ DMA/拷贝输入的识别结果，并检查开关 OSD 的编码、共享输入�
 视频区域保持 16:9、桌面端最大宽度 880px，温湿度卡片位于画面下方，窄屏时自动改为单栏。
 
 配置、完整帧格式、MQTT 示例与验证方法见 [STM32 串口与 MQTT](docs/stm32-uart-mqtt.md)。
+
+### 设备录像与网页回放
+
+录像固定保存在 `/userdata/rkmon-video/camera/YYYY-MM-DD/HH-MM-SS-ffffff.mp4`，目录与文件名采用
+UTC；网页日期和时间轴显示北京时间。SQLite 索引为 `/userdata/rkmon-video/index.sqlite3`，启用 WAL。
+部署只更新 `/opt/rkmon` 的程序与配置，不覆盖或备份录像目录。
+
+MediaMTX 将已有 H.264 码流封装为 fMP4，目标每分钟一个文件、内部 part 为 1 秒，无二次编码。
+`rkmon-recording.service` 使用 Python 3 标准库与 `ffprobe`，负责分段校验、SQLite、事件聚合、
+时间查询和清理。板端需要 Python 3.10+、SQLite 模块、时区数据及 ffprobe。
+
+`config/recording.ini` 默认保留 7 天、预留至少 1024 MiB；`max_gib=0` 表示不另设总量上限。
+容量不足时清理最早的已完成/可恢复/无效分段。正在写入及最近 90 秒仍有修改的文件不删除。
+当前约 4 Mbps 码率每天需要约 43.2 GB；实际保留时间受分区容量限制，7 天不是容量不足时的保证。
+索引服务会显示磁盘剩余空间和清理故障；磁盘满或挂载故障需要处理，不能以 part 时长保证断电丢失上限。
+
+分段创建/完成由本机 Unix datagram 通知。每 10 秒核对目录，通知丢失或异常退出的文件在至少
+90 秒无修改后由 ffprobe 探测恢复；未完成或损坏文件不当作正常录像展示。数据库写入幂等，
+文件删除和索引更新采用可恢复状态，不要求文件系统与 SQLite 跨资源事务。
+
+访问 `/recordings.html` 或实时页的“查看录像回放”，可选择日期、时间轴、片段、倍速和下载。
+播放按已完成分段请求有限时长的 MP4 窗口，结束后根据索引续播；断流空档在时间轴上留空，
+续播跳过空档。普通浏览器播放跳转受关键帧影响，不提供逐帧精确裁剪。下载为原始 fMP4 分段。
+
+| 路径 | 用途 |
+| --- | --- |
+| `/api/recordings/status` | 索引和存储状态 |
+| `/api/recordings/days` | 有录像的日期 |
+| `/api/recordings?date=YYYY-MM-DD` | 当天片段与检测事件 |
+| `/api/playback?start=UTC毫秒&duration=秒` | 回放窗口，最多 300 秒 |
+| `/api/recordings/{id}/download` | Nginx 内部转发文件下载 |
+| `/recording-media/get` | 同源代理 MediaMTX 回放 |
+
+服务监听 `127.0.0.1:9010`，MediaMTX 回放监听 `127.0.0.1:9996`；浏览器统一经 Nginx 9000 访问。
+没有开放磁盘目录浏览。沿用现有局域网监控访问模型，本版本没有额外账号系统。
+
+AI 结果增加来源帧的 `received_at_ms`，通过 `[ai] event_socket` 非阻塞发送到索引服务；
+持续同类目标按 3 秒间隔聚合为事件，使用帧接收时间而非推理结束时间。事件传递是尽力而为，
+接收服务离线/队列满期间的事件不能从最新快照恢复，不作为完整审计日志。录像时间来自 MediaMTX，
+尚未实现与摄像头帧时间的精确跨进程映射；事件跳转默认前滚 3 秒，可能存在时间偏差。
+
+部署仍使用 `bash script/deploy.sh`，需要 sudo 创建数据目录和安装新服务。部署后至少等待一个
+分段完成，再检查回放。主机索引回归：`python3 tests/recording_tests.py`。
+板端独立端口集成测试：`python3 tests/recording_integration.py 源码目录`；使用 18554、19996、
+19010、19000 和 Chromium 调试端口 19222，读取现有 RTSP，将测试录像写入独立 `/tmp` 目录，
+测试录制、完成钩子、回放解码、SQLite 重启、事件、Nginx 下载及 Chromium 实际播放。

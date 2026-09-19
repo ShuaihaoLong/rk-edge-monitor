@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>录像回放 · 设备监控</title>
+  <link rel="stylesheet" href="style.css"><link rel="stylesheet" href="recordings.css">
+  <script defer src="recordings.js"></script>
+</head>
+<body>
+  <main class="recording-page">
+    <header class="recording-header"><h1>录像回放</h1><a href="/">返回实时监控</a></header>
+    <section class="recording-card">
+      <div class="recording-toolbar">
+        <label>录像日期 <input id="recording-date" type="date"></label>
+        <button id="recording-refresh" type="button">刷新</button>
+        <label>有录像日期 <select id="recording-days"><option value="">选择日期</option></select></label>
+        <span id="storage-state" class="hint" role="status">正在读取存储状态…</span>
+      </div>
+      <p class="hint">时间采用北京时间。绿色表示可播放录像，橙色表示检测事件。新分段完成后进入列表，通常约一分钟。</p>
+      <canvas id="recording-timeline" height="44" aria-label="当日录像及事件时间轴"></canvas>
+      <div class="timeline-labels"><span>00:00</span><span>06:00</span><span>12:00</span><span>18:00</span><span>24:00</span></div>
+      <label for="recording-seek" class="hint">选择回放时间</label>
+      <input id="recording-seek" type="range" min="0" max="86399" step="1" value="0">
+      <p id="selected-time" class="hint">—</p>
+    </section>
+    <section class="recording-card">
+      <div class="recording-video"><video id="recording-player" controls playsinline preload="metadata" aria-label="历史录像"></video></div>
+      <div class="recording-toolbar">
+        <button id="skip-back" type="button">后退 10 秒</button><button id="skip-forward" type="button">前进 10 秒</button>
+        <label>倍速 <select id="recording-speed"><option value="0.5">0.5×</option><option value="1" selected>1×</option><option value="1.5">1.5×</option><option value="2">2×</option><option value="4">4×</option></select></label>
+        <span id="recording-clock">尚未播放</span>
+      </div>
+      <p id="recording-message" role="status">选择日期或录像片段开始播放。</p>
+    </section>
+    <div class="recording-columns">
+      <section class="recording-card"><h2>录像片段</h2><p id="recording-count" class="hint"></p><ol id="recording-list"></ol></section>
+      <section class="recording-card"><h2>检测事件</h2><p class="hint">按同类目标连续出现聚合，跳转时提前 3 秒。事件定位可能有少量时间偏差。</p><ol id="event-list"></ol></section>
+    </div>
+  </main>
+</body>
+</html>

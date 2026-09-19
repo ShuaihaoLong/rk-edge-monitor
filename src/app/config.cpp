@@ -166,6 +166,8 @@ RuntimeConfig load_config(const std::filesystem::path& path) {
     ai.model_path = resolve(ini.take("ai.model", "../models/yolov8n.rknn"));
     ai.labels_path = resolve(ini.take("ai.labels", "../models/coco_80_labels_list.txt"));
     ai.result_path = resolve(ini.take("ai.result", "../run/detections.json"));
+    ai.event_socket = ini.take("ai.event_socket", "");
+    if(ai.event_socket.size()>=108)throw std::runtime_error("ai.event_socket path too long");
     ai.fps = ini.integer("ai.fps", 10, 1, 60);
     ai.preprocess = ini.take("ai.preprocess", "rga");
     ai.input_memory = ini.take("ai.input_memory", "dmabuf");

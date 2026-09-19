@@ -8,6 +8,8 @@ authInternalUsers:
     permissions:
       - action: publish
         path: camera
+      - action: playback
+        path: camera
   - user: any
     ips: []
     permissions:
@@ -16,7 +18,9 @@ authInternalUsers:
 api: false
 metrics: false
 pprof: false
-playback: false
+playback: true
+playbackAddress: 127.0.0.1:9996
+playbackAllowOrigins: []
 rtsp: true
 rtspAddress: 127.0.0.1:8554
 rtspTransports: [tcp]
@@ -37,3 +41,11 @@ webrtcICEServers2: []
 paths:
   camera:
     source: publisher
+    record: true
+    recordPath: /userdata/rkmon-video/%path/%Y-%m-%d/%H-%M-%S-%f
+    recordFormat: fmp4
+    recordPartDuration: 1s
+    recordSegmentDuration: 1m
+    recordDeleteAfter: 0s
+    runOnRecordSegmentCreate: python3 /opt/rkmon/lib/recording/notify.py segment_open
+    runOnRecordSegmentComplete: python3 /opt/rkmon/lib/recording/notify.py segment_complete

@@ -105,3 +105,8 @@ if(RKMON_WITH_RGA AND RKMON_WITH_RKNN AND RKMON_WITH_GSTREAMER)
     target_link_libraries(rkmon_dma_pipeline_tests PRIVATE rkmon::ai rkmon::video)
     target_include_directories(rkmon_dma_pipeline_tests PRIVATE "${PROJECT_SOURCE_DIR}/src")
 endif()
+
+if(NOT CMAKE_CROSSCOMPILING)
+    add_test(NAME recording_index COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/recording_tests.py")
+    set_tests_properties(recording_index PROPERTIES TIMEOUT 30)
+endif()

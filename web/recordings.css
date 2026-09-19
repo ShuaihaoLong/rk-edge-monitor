@@ -1,0 +1,21 @@
+.recording-page { display:block; max-width:1180px; }
+.recording-header { margin-bottom:20px; }
+a { color:#87d3ed; }
+.recording-card { padding:18px; margin-bottom:18px; border:1px solid #26313e; border-radius:12px; background:#111923; min-width:0; }
+.recording-toolbar { display:flex; align-items:center; flex-wrap:wrap; gap:14px; margin:12px 0; font-size:14px; }
+button,input,select { color:inherit; background:#0c131c; border:1px solid #415064; border-radius:6px; padding:7px; }
+button { cursor:pointer; }
+button:hover { border-color:#74e5a6; }
+#recording-timeline { display:block; width:100%; height:44px; cursor:crosshair; background:#090e15; border-radius:5px; }
+.timeline-labels { display:flex; justify-content:space-between; font-size:11px; color:#8c9baa; margin-top:5px; }
+#recording-seek { width:100%; padding:0; accent-color:#74e5a6; }
+.recording-video { aspect-ratio:16/9; background:#05080c; }
+#recording-player { height:100%; width:100%; }
+#recording-clock { font-variant-numeric:tabular-nums; }
+#recording-message { color:#a9b8c7; font-size:14px; }
+.recording-columns { display:grid; grid-template-columns:1fr 1fr; gap:18px; }
+.recording-columns h2 { font-size:16px; margin:0; }
+#recording-list,#event-list { list-style:none; padding:0; max-height:420px; overflow:auto; }
+#recording-list li,#event-list li { display:flex; align-items:center; flex-wrap:wrap; gap:10px; padding:10px 0; border-top:1px solid #26313e; font-size:13px; }
+#recording-list button,#event-list button { text-align:left; flex:1; }
+@media(max-width:800px) { .recording-columns { grid-template-columns:1fr; gap:0; } }

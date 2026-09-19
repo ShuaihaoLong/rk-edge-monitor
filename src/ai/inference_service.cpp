@@ -14,7 +14,7 @@ InferenceService::InferenceService(std::unique_ptr<IObjectDetector> detector,std
     :InferenceService(single(std::move(detector)),std::move(input),std::move(config),std::move(logger)) {}
 InferenceService::InferenceService(std::vector<std::unique_ptr<IObjectDetector>> detectors,std::shared_ptr<Queue> input,
     InferenceConfig config,std::shared_ptr<spdlog::logger> logger)
-    :detectors_(std::move(detectors)),input_(std::move(input)),config_(std::move(config)),writer_(config_.result_path),logger_(std::move(logger)) {
+    :detectors_(std::move(detectors)),input_(std::move(input)),config_(std::move(config)),writer_(config_.result_path,config_.event_socket),logger_(std::move(logger)) {
     if(!input_ || !config_.fps || config_.fps>60 || config_.result_path.empty() ||
        config_.workers<1 || config_.workers>3 || detectors_.size()!=config_.workers ||
        (config_.core_policy!="auto" && config_.core_policy!="split") ||
@@ -119,6 +119,7 @@ void InferenceService::run() noexcept {
                         try {
                             auto result=detectors_[index]->detect(frame);
                             result.sequence=frame.sequence;result.source_generation=frame.source_generation;
+                            result.received_at=frame.received_at;
                             result.source_time=frame.timestamp;result.worker_index=static_cast<unsigned>(index);
                             return result;
                         } catch(...) {detectors_[index]->close();throw;}
