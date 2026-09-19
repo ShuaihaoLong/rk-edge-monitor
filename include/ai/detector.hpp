@@ -14,6 +14,8 @@ struct Detection {
 };
 struct DetectionResult {
     std::uint64_t sequence{};
+    std::uint64_t source_generation{};
+    unsigned worker_index{};
     std::chrono::steady_clock::time_point source_time{};
     int width{}, height{};
     double inference_ms{};
@@ -28,5 +30,5 @@ public:
     virtual DetectionResult detect(const camera::VideoFrame&) = 0;
     virtual void close() noexcept = 0;
 };
-std::unique_ptr<IObjectDetector> make_detector(const InferenceConfig& config);
+std::unique_ptr<IObjectDetector> make_detector(const InferenceConfig& config, unsigned worker_index = 0);
 }

@@ -51,8 +51,11 @@ Application::ServiceFactory make_service_factory(RuntimeConfig config) {
                 auto* decode_view = decode.get();
                 services.push_back(std::move(decode));
                 if (config.ai) {
+                    std::vector<std::unique_ptr<ai::IObjectDetector>> detectors;
+                    for (unsigned i = 0; i < config.ai->workers; ++i)
+                        detectors.push_back(ai::make_detector(*config.ai, i));
                     services.push_back(std::make_unique<ai::InferenceService>(
-                        ai::make_detector(*config.ai), ai_queue, *config.ai, logger));
+                        std::move(detectors), ai_queue, *config.ai, logger));
                 }
                 if (config.stream) {
                     services.push_back(std::make_unique<video::VideoStreamService>(

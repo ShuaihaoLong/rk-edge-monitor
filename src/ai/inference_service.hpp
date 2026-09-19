@@ -13,6 +13,8 @@ public:
     using Queue=core::BoundedQueue<camera::VideoFrame>;
     InferenceService(std::unique_ptr<IObjectDetector>, std::shared_ptr<Queue>, InferenceConfig,
                      std::shared_ptr<spdlog::logger> logger={});
+    InferenceService(std::vector<std::unique_ptr<IObjectDetector>>, std::shared_ptr<Queue>, InferenceConfig,
+                     std::shared_ptr<spdlog::logger> logger={});
     ~InferenceService() override;
     bool start() override;
     void request_stop() noexcept override;
@@ -23,13 +25,14 @@ public:
 private:
     void run() noexcept;
     void publish(const std::string&,const DetectionResult* =nullptr) noexcept;
-    std::unique_ptr<IObjectDetector> detector_;
+    std::vector<std::unique_ptr<IObjectDetector>> detectors_;
     std::shared_ptr<Queue> input_;
     InferenceConfig config_;
     ResultWriter writer_;
     std::shared_ptr<spdlog::logger> logger_;
     std::thread worker_;
     std::atomic<bool> stop_{false},running_{false};
+    std::atomic<unsigned> ready_workers_{0};
     mutable std::mutex mutex_;
     std::string detail_;
 };

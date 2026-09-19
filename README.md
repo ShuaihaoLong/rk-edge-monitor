@@ -265,7 +265,19 @@ AI 预处理默认使用 RGA：NV12 转 RGB、缩放到模型有效区域、保�
 `ldd` 检查会检查新增动态库依赖；部署包不自带或升级板端 RGA 驱动/运行库。
 若构建时关闭 RGA，启用 AI 时须配置 `preprocess=cpu`。
 
-本阶段仍为单线程、单 RKNN context，并保留 `rknn_inputs_set` 输入路径；尚未打通 DMA-BUF 零拷贝。
+NPU 并发由 `[ai] workers=1..3` 和 `core_policy=auto|split` 配置。仓库配置使用
+`workers=3`、`core_policy=split`，分别绑定 NPU 核心 0/1/2；`auto` 交给 RKNN 运行时选择。
+旧配置省略这两个字段时使用单线程、自动选核。每个工作线程独占模型 context、RGA 句柄和 RGB
+缓冲区，独立初始化及失败重试；模型分别加载，内存占用会随工作线程数增加。
+
+通用固定线程池位于 `include/core/thread_pool.hpp`，支持按线程索引提交任务，忙时拒绝提交。
+推理服务每个线程最多一个任务，调度端只保留一帧最新输入；`fps` 是所有线程合计的提交上限，
+当前仍为 10，若要提高吞吐可调整到 30（允许 1..60）。多线程不保证线性提速，需要实机比较。
+结果只由调度线程写出，丢弃旧序号、旧相机代次及超过 700 ms 的结果，避免乱序覆盖。
+停止时取消未开始任务，等待正在执行的 RKNN 调用返回，再由所属线程释放资源。
+
+仍保留 `rknn_inputs_set` 输入路径；尚未打通 DMA-BUF 零拷贝。
+`detections.json` 中 `worker_index` 表示工作线程索引，`source_generation` 表示相机代次。
 `detections.json` 新增耗时字段，便于在相同视频和推理频率下对照：
 
 | 字段 | 统计范围 |
@@ -276,7 +288,15 @@ AI 预处理默认使用 RGA：NV12 转 RGB、缩放到模型有效区域、保�
 | `postprocess_ms` | 输出获取、后处理和结果组装 |
 | `inference_ms` | 上述阶段总耗时，保持原字段含义 |
 
-此次 RGA 路径尚未进行实机正确性与性能测试，暂不宣称具体加速比例。
+板端 `rkmon_rga_tests` 已验证黑白 NV12 转 RGB、灰边填充、输入尺寸变化及输出缓冲区复用；
+传入模型和标签路径时，还会用合成帧验证三个独立 NPU 工作线程均能产出结果：
+
+```bash
+./rkmon_rga_tests /opt/rkmon/models/yolov8n.rknn /opt/rkmon/models/coco_80_labels_list.txt
+```
+
+该测试需真实 RGA/NPU，不自动加入主机 CTest；合成帧验证不替代实际画面的识别准确率和性能测试。
+暂不宣称具体加速比例。
 
 结果以原图坐标输出到 `/run/rkmon/detections.json`，原子替换文件，Nginx 通过只读 `/api/detections` 提供访问。
 运行目录由 systemd 创建，避免频繁快照写入持久存储；手动启动时需要可写的结果目录。

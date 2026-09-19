@@ -21,6 +21,7 @@ struct OutputGuard {
 }
 struct RknnDetector::Impl {
     InferenceConfig config;
+    unsigned worker_index{};
     rknn_app_context_t app{};
     rknn_tensor_attr input{};
     std::vector<rknn_tensor_attr> attrs{9};
@@ -30,7 +31,11 @@ struct RknnDetector::Impl {
     std::unique_ptr<RgaLetterbox> rga;
 #endif
 };
-RknnDetector::RknnDetector(InferenceConfig c):impl_(std::make_unique<Impl>()) { impl_->config=std::move(c); }
+RknnDetector::RknnDetector(InferenceConfig c, unsigned worker_index):impl_(std::make_unique<Impl>()) {
+    require(c.workers>=1 && c.workers<=3 && worker_index<c.workers,"invalid NPU worker index");
+    require(c.core_policy=="auto" || c.core_policy=="split","invalid NPU core policy");
+    impl_->config=std::move(c);impl_->worker_index=worker_index;
+}
 RknnDetector::~RknnDetector() { close(); }
 void RknnDetector::close() noexcept {
 #ifdef RKMON_WITH_RGA
@@ -52,6 +57,9 @@ void RknnDetector::open() {
         std::vector<char> model((std::istreambuf_iterator<char>(file)),{});
         require(!model.empty() && model.size()<256*1024*1024,"invalid model size");
         require(rknn_init(&s.app.rknn_ctx,model.data(),model.size(),0,nullptr)==0,"rknn_init failed");
+        const auto core=s.config.core_policy=="split"
+            ? static_cast<rknn_core_mask>(1u<<s.worker_index) : RKNN_NPU_CORE_AUTO;
+        require(rknn_set_core_mask(s.app.rknn_ctx,core)==0,"rknn_set_core_mask failed");
         require(rknn_query(s.app.rknn_ctx,RKNN_QUERY_IN_OUT_NUM,&s.app.io_num,sizeof(s.app.io_num))==0,"query IO failed");
         require(s.app.io_num.n_input==1 && s.app.io_num.n_output==9,"YOLOv8 requires 1 input and 9 outputs");
         s.input={};
@@ -107,6 +115,7 @@ DetectionResult RknnDetector::detect(const camera::VideoFrame& frame) {
     object_detect_result_list objects{};letterbox_t letterbox{image->x_pad,image->y_pad,image->scale};
     require(post_process(&s.app,output.outputs.data(),&letterbox,0.25f,0.45f,&objects)==0,"postprocess failed");
     DetectionResult result;result.sequence=frame.sequence;result.source_time=frame.timestamp;
+    result.source_generation=frame.source_generation;result.worker_index=s.worker_index;
     result.width=frame.width;result.height=frame.height;
     for(int i=0;i<objects.count;++i) {
         const auto& d=objects.results[i];

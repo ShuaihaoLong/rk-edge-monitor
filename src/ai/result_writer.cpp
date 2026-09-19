@@ -27,6 +27,8 @@ void ResultWriter::write(const std::string& status,const DetectionResult* r) {
     if(!file)throw std::runtime_error("cannot write AI result snapshot");
     file << "{\"session\":" << quote(session_) << ",\"revision\":" << ++revision_
          << ",\"status\":" << quote(status) << ",\"sequence\":" << (r?r->sequence:0)
+         << ",\"source_generation\":" << (r?r->source_generation:0)
+         << ",\"worker_index\":" << (r?static_cast<int>(r->worker_index):-1)
          << ",\"width\":" << (r?r->width:0) << ",\"height\":" << (r?r->height:0)
          << ",\"age_ms\":" << (r?std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now()-r->source_time).count():0)
          << ",\"inference_ms\":" << (r?r->inference_ms:0)

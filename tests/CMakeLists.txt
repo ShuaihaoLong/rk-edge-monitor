@@ -92,3 +92,10 @@ if(NOT CMAKE_CROSSCOMPILING)
     add_test(NAME mqtt_status COMMAND rkmon_mqtt_tests)
     set_tests_properties(mqtt_status PROPERTIES TIMEOUT 15)
 endif()
+
+if(RKMON_WITH_RGA AND RKMON_WITH_RKNN)
+    # 需 RGA/NPU 硬件，板端显式执行；可传模型和标签路径验证三线程推理。
+    add_executable(rkmon_rga_tests rga_tests.cpp)
+    target_link_libraries(rkmon_rga_tests PRIVATE rkmon::ai)
+    target_include_directories(rkmon_rga_tests PRIVATE "${PROJECT_SOURCE_DIR}/src")
+endif()

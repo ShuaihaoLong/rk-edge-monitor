@@ -168,6 +168,10 @@ RuntimeConfig load_config(const std::filesystem::path& path) {
     ai.result_path = resolve(ini.take("ai.result", "../run/detections.json"));
     ai.fps = ini.integer("ai.fps", 10, 1, 60);
     ai.preprocess = ini.take("ai.preprocess", "rga");
+    ai.workers = ini.integer("ai.workers", 1, 1, 3);
+    ai.core_policy = ini.take("ai.core_policy", "auto");
+    if (ai.core_policy != "auto" && ai.core_policy != "split")
+        throw std::runtime_error(absolute.string() + ": ai.core_policy must be auto or split");
     if (ai.preprocess != "rga" && ai.preprocess != "cpu")
         throw std::runtime_error(absolute.string() + ": ai.preprocess must be rga or cpu");
     if (ai_enabled) {

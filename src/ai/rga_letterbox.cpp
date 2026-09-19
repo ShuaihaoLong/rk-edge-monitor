@@ -60,7 +60,10 @@ const ModelImage& RgaLetterbox::process(const camera::VideoFrame& frame) {
     require_status(imcheck_t(src, dst, {}, source, destination, {}, IM_SYNC), "letterbox parameters");
     if (s.source_width != frame.width || s.source_height != frame.height) {
         // 只在首次使用或源尺寸变化时清灰边；每个后续任务完整覆盖有效图像矩形。
-        require_status(imfill(dst, {0, 0, s.size, s.size}, 0xff727272, 1), "padding fill");
+        // RGB 纯色填充不进行颜色转换，不能沿用 NV12 转换任务的 CSC 参数。
+        auto fill_dst = dst;
+        fill_dst.color_space_mode = 0;
+        require_status(imfill(fill_dst, {0, 0, s.size, s.size}, 0xff727272, 1), "padding fill");
     }
     im_opt_t options{};
     require_status(improcess(src, dst, {}, source, destination, {}, -1, nullptr, &options, IM_SYNC),
