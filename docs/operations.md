@@ -1,0 +1,48 @@
+# 运行与运维
+
+## 部署链路
+
+PC 端统一入口是 `script/deploy.sh`：检查 SSH 和板端依赖，构建或复用 ARM64 程序，调用 `package-monitor.sh` 打包，上传到板端独立临时目录，执行 root 安装脚本，检查服务和 HTTP，最后清理临时目录。
+
+```bash
+bash script/deploy.sh --dry-run
+bash script/deploy.sh --skip-build
+bash script/deploy.sh --host elf@192.168.100.11
+```
+
+部署包由 `script/package-monitor.sh` 复制 C++ 二进制、MediaMTX、Python 录像服务、网页、配置、systemd 文件和离线 deb 包。板端安装到 `/opt/rkmon`；录像和 SQLite 保留在 `/userdata/rkmon-video`，升级不会覆盖录像目录。
+
+## 服务关系
+
+| 服务 | 作用 | 主要配置 |
+| --- | --- | --- |
+| `rkmon` | 相机、视频、AI、MQTT、STM32 | `/opt/rkmon/config/rkmon.ini` |
+| `rkmon-recording` | 录像索引、事件和回放 API | `/opt/rkmon/config/recording.ini` |
+| `mediamtx` | RTSP、WebRTC、录像、Playback | `/opt/rkmon/config/mediamtx.yml` |
+| `mosquitto` | MQTT broker | `/etc/mosquitto/conf.d/rkmon.conf` |
+| `nginx` | 网页和同源代理 | `/etc/nginx/sites-available/rkmon` |
+
+主要入口是 `http://<board-ip>:9000/`。Nginx 将 `/api/recordings` 和 `/api/playback` 转给 `rkmon-recording`，将 `/recording-media/get` 转给 MediaMTX Playback；录像文件路径使用 internal alias，不直接暴露目录。
+
+## 日常检查
+
+```bash
+systemctl status rkmon rkmon-recording mediamtx mosquitto nginx
+journalctl -u rkmon -u rkmon-recording -u mediamtx -f
+curl --fail http://127.0.0.1:9000/api/recordings/status
+sudo nginx -t
+```
+
+录像状态接口会返回索引服务状态、最后扫描时间、最后事件时间和磁盘空间。录像服务由 `elf` 运行，MediaMTX 也以 `elf` 运行；录像目录需要该用户可写。
+
+## 故障处理
+
+- 服务反复重启：先查看对应 `journalctl`，再检查配置和动态库，不要先删除录像目录。
+- 录像列表为空：检查 `rkmon-recording`、`/userdata/rkmon-video`、`ffprobe` 和 MediaMTX segment hook。
+- 回放失败：检查 MediaMTX Playback 是否监听 `127.0.0.1:9996`，以及 Nginx 配置是否通过 `nginx -t`。
+- 磁盘不足：录像服务按保留天数、总容量和预留空间清理旧分段；不要手工删除正在写入的文件。
+- 部署失败：部署临时目录只用于本次传输；若 sudo 生成 root 文件，`deploy.sh` 会用 sudo 兜底清理。
+
+## 安全边界
+
+当前配置面向可信局域网，没有登录、TLS 或公网认证。MediaMTX 的 RTSP、Playback 和 WebRTC 发布入口绑定本机，网页仅通过 Nginx 暴露。不要把 9000 端口直接映射到不可信网络；更换板卡地址时同步修改 MediaMTX WebRTC allow-origin 和 additional-host 配置。

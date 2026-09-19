@@ -1,5 +1,7 @@
 # USB 相机验证记录
 
+> 阶段验证记录（2026-09-07）。其中关于下游解码尚未实现的结论只适用于本轮测试；当前模块说明见 [Camera](modules/camera.md) 和 [Media](modules/media.md)。
+
 2026-09-07，通过 SSH 在 RK3588（Linux 5.10.209，aarch64）验证。相机为 SYD USB Camera（0bda:d576），uvcvideo，USB 480 Mbps。使用 `tests/camera_probe.cpp`，帧数据仅在内存中检查，不保存图像。
 
 | 测试 | 结果 |

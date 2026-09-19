@@ -1,7 +1,5 @@
 /build/
 /.local/
 /.vscode/
-/docs/*
-!/docs/stm32-uart-mqtt.md
 __pycache__/
 *.pyc
