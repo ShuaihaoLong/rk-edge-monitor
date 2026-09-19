@@ -1,4 +1,4 @@
-#include "ai/rga_letterbox.hpp"
+#include "ai/letterbox/rga_letterbox.hpp"
 #include "ai/inference_service.hpp"
 #include "media/rga_copy.hpp"
 #include <cstring>

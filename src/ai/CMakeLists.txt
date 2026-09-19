@@ -5,7 +5,7 @@ endif()
 option(RKMON_WITH_RKNN "Enable RK3588 NPU inference" ${_rknn_default})
 option(RKMON_WITH_RGA "Enable RGA AI preprocessing" ${_rknn_default})
 add_library(rkmon_ai STATIC inference_service.cpp result_writer.cpp
-    nv12_letterbox.cpp factory.cpp)
+    letterbox/nv12_letterbox.cpp factory.cpp)
 add_library(rkmon::ai ALIAS rkmon_ai)
 target_include_directories(rkmon_ai
     PUBLIC "${PROJECT_SOURCE_DIR}/include"
@@ -15,7 +15,7 @@ target_compile_options(rkmon_ai PRIVATE -Wall -Wextra -Wpedantic)
 if(RKMON_WITH_RGA)
     find_path(RGA_INCLUDE_DIR im2d.h PATH_SUFFIXES rga REQUIRED)
     find_library(RGA_LIBRARY rga REQUIRED)
-    target_sources(rkmon_ai PRIVATE rga_letterbox.cpp)
+    target_sources(rkmon_ai PRIVATE letterbox/rga_letterbox.cpp)
     target_include_directories(rkmon_ai SYSTEM PRIVATE "${RGA_INCLUDE_DIR}")
     target_compile_definitions(rkmon_ai PRIVATE RKMON_WITH_RGA)
     target_link_libraries(rkmon_ai PRIVATE "${RGA_LIBRARY}")

@@ -1,7 +1,7 @@
 #include "rknn_detector.hpp"
-#include "ai/nv12_letterbox.hpp"
+#include "ai/letterbox/nv12_letterbox.hpp"
 #ifdef RKMON_WITH_RGA
-#include "ai/rga_letterbox.hpp"
+#include "ai/letterbox/rga_letterbox.hpp"
 #endif
 #include "yolov8.h"
 #include <algorithm>

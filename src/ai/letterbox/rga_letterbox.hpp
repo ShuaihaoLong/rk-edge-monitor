@@ -1,6 +1,6 @@
 #pragma once
 
-#include "ai/nv12_letterbox.hpp"
+#include "ai/letterbox/nv12_letterbox.hpp"
 #include <memory>
 
 namespace rkmon::ai {

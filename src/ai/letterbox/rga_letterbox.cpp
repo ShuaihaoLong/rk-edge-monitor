@@ -1,4 +1,4 @@
-#include "ai/rga_letterbox.hpp"
+#include "ai/letterbox/rga_letterbox.hpp"
 
 #include <im2d.h>
 #include <stdexcept>
