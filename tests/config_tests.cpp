@@ -50,7 +50,13 @@ int main() {
         auto mqtt_config = fixture.read("[mqtt]\nenabled=true\ndevice_id=center_1\nrole=center\nbroker_host=127.0.0.1\npublish_interval_ms=500\n");
         check(mqtt_config.mqtt && mqtt_config.mqtt->device_id == "center_1" &&
               mqtt_config.mqtt->role == "center" && mqtt_config.mqtt->publish_interval_ms == 500, "MQTT config wrong");
+        auto stm32_config = fixture.read("[mqtt]\nenabled=true\ndevice_id=center_1\n[stm32]\nenabled=true\n");
+        check(stm32_config.stm32 && stm32_config.stm32->device == "/dev/ttyS9" &&
+              stm32_config.stm32->baud_rate == 115200, "STM32 settings not loaded");
+        check(!fixture.read("[stm32]\nenabled=false\n").stm32, "disabled STM32 instantiated");
         for (const std::string text : {
+            "[stm32]\nenabled=true\n", "[stm32]\nbaud_rate=12345\n", "[stm32]\nframe_timeout_ms=0\n",
+            "[mqtt]\nenabled=true\ndevice_id=ok\n[stm32]\nenabled=true\ndevice=\n",
             "[ai]\nenabled=true\n", "[ai]\nfps=0\n", "[ai]\nfps=61\n",
             "[mqtt]\nenabled=true\n", "[mqtt]\nenabled=true\ndevice_id=bad/id\n",
             "[mqtt]\nenabled=true\ndevice_id=ok\nrole=server\n",

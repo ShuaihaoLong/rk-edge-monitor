@@ -276,3 +276,16 @@ src/media/
 避免异常网络下长期展示旧的在线消息。摄像头服务在设备不存在、采集错误或连续超时时保持进程运行，
 将 `camera_online` 置为 `false` 并按 `reconnect_interval_ms` 后台重试；下游队列在重连期间保持有效，
 摄像头恢复后视频、推流和识别链路可继续工作。
+
+### STM32 温湿度与串口控制
+
+已添加 `[stm32]` 模块，通过 `/dev/ttyS9`（115200/8N1）解析 STM32 的四字节 DHT11 上报，
+使用简化 V1 帧和 CRC32 校验。温湿度发布到 `rkmon/devices/<device_id>/stm32/telemetry`，
+状态发布到 `/stm32/status`；超过 5 秒没有有效采样标记离线，串口和 MQTT 独立重连。
+
+`/stm32/command` 接收最多 128 字节原始二进制载荷，封装为 `TYPE=0x20` 下发；
+`/stm32/command_result` 返回串口发送结果，`/stm32/ack` 转发 `TYPE=0x00` 的原始应答。
+当前 STM32 固件尚未实现控制动作和 ACK 生成，因此发送成功不代表执行成功。
+这些通道采用 QoS 0，控制命令不重试，不应设置 retained。现有网页暂未展示温湿度。
+
+配置、完整帧格式、MQTT 示例与验证方法见 [STM32 串口与 MQTT](docs/stm32-uart-mqtt.md)。

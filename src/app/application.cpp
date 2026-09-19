@@ -6,6 +6,7 @@
 
 #include "ai/inference_service.hpp"
 #include "mqtt/device_status_service.hpp"
+#include "stm32/stm32_service.hpp"
 
 #include <exception>
 #include <iostream>
@@ -29,6 +30,10 @@ Application::ServiceFactory make_service_factory(RuntimeConfig config) {
         if (config.mqtt) {
             services.push_back(std::make_unique<mqtt::DeviceStatusService>(
                 *config.mqtt, [capture_view] { return capture_view && capture_view->online(); }, logger));
+        }
+        if (config.stm32) {
+            if (!config.mqtt) throw std::invalid_argument("STM32 service requires MQTT");
+            services.push_back(std::make_unique<stm32::Stm32Service>(*config.stm32, *config.mqtt, logger));
         }
         if (capture) {
             services.push_back(std::move(capture));

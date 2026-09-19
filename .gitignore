@@ -1,4 +1,5 @@
 /build/
 /.local/
 /.vscode/
-/docs/
+/docs/*
+!/docs/stm32-uart-mqtt.md

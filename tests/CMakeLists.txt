@@ -8,6 +8,13 @@ if(NOT CMAKE_CROSSCOMPILING)
     endforeach()
 endif()
 
+add_executable(rkmon_stm32_tests stm32_tests.cpp)
+target_link_libraries(rkmon_stm32_tests PRIVATE rkmon::stm32)
+target_include_directories(rkmon_stm32_tests PRIVATE "${PROJECT_SOURCE_DIR}/src")
+if(NOT CMAKE_CROSSCOMPILING)
+    add_test(NAME stm32_protocol COMMAND rkmon_stm32_tests)
+endif()
+
 add_executable(rkmon_camera_tests camera_tests.cpp)
 target_link_libraries(rkmon_camera_tests PRIVATE rkmon::camera)
 target_compile_options(rkmon_camera_tests PRIVATE -Wall -Wextra -Wpedantic)
@@ -30,6 +37,9 @@ if(NOT CMAKE_CROSSCOMPILING)
 endif()
 if(NOT CMAKE_CROSSCOMPILING)
     find_package(Python3 REQUIRED COMPONENTS Interpreter)
+    add_test(NAME stm32_integration COMMAND "${Python3_EXECUTABLE}"
+        "${CMAKE_CURRENT_SOURCE_DIR}/stm32_integration_tests.py" "$<TARGET_FILE:rkmon>")
+    set_tests_properties(stm32_integration PROPERTIES TIMEOUT 30)
     add_test(NAME app_startup COMMAND "${Python3_EXECUTABLE}"
         "${CMAKE_CURRENT_SOURCE_DIR}/startup_tests.py" "$<TARGET_FILE:rkmon>"
         "${PROJECT_SOURCE_DIR}/script/start.sh")

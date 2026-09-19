@@ -37,7 +37,7 @@ public:
                 if (line.back() != ']') error(number, "malformed section");
                 section = trim(line.substr(1, line.size() - 2));
                 if (section != "app" && section != "logging" && section != "camera" && section != "video" &&
-                    section != "stream" && section != "ai" && section != "mqtt")
+                    section != "stream" && section != "ai" && section != "mqtt" && section != "stm32")
                     error(number, "unknown section: " + section);
                 if (!sections.insert(section).second) error(number, "duplicate section: " + section);
                 continue;
@@ -191,6 +191,22 @@ RuntimeConfig load_config(const std::filesystem::path& path) {
         if (mqtt.publish_interval_ms >= mqtt.keepalive_seconds * 1000)
             throw std::runtime_error(absolute.string() + ": MQTT publish interval must be shorter than keepalive");
         config.mqtt = mqtt;
+    }
+    const bool stm32_enabled = ini.boolean("stm32.enabled", false);
+    stm32::Config stm32;
+    stm32.device = ini.take("stm32.device", "/dev/ttyS9");
+    if (!stm32.device.empty()) stm32.device = resolve(stm32.device);
+    stm32.baud_rate = ini.integer("stm32.baud_rate", 115200, 9600, 230400);
+    stm32.frame_timeout_ms = ini.integer("stm32.frame_timeout_ms", 200, 20, 5000);
+    stm32.stale_timeout_ms = ini.integer("stm32.stale_timeout_ms", 5000, 500, 60000);
+    stm32.reconnect_interval_ms = ini.integer("stm32.reconnect_interval_ms", 2000, 100, 60000);
+    if (stm32.baud_rate != 9600 && stm32.baud_rate != 19200 && stm32.baud_rate != 38400 &&
+        stm32.baud_rate != 57600 && stm32.baud_rate != 115200 && stm32.baud_rate != 230400)
+        throw std::runtime_error(absolute.string() + ": unsupported stm32.baud_rate");
+    if (stm32_enabled) {
+        if (!config.mqtt) throw std::runtime_error(absolute.string() + ": STM32 requires mqtt.enabled=true");
+        if (stm32.device.empty()) throw std::runtime_error(absolute.string() + ": stm32.device is required");
+        config.stm32 = stm32;
     }
     ini.finish();
     return config;
