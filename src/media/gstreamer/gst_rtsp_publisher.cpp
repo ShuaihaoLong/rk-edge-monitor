@@ -148,7 +148,7 @@ void GstRtspPublisher::write(const camera::VideoFrame& frame) {
         throw std::runtime_error("publisher input format changed or timestamp regressed");
     }
     s.previous = frame.timestamp;
-    const auto text = s.config.osd_enabled ? osd_text(frame, s.config.osd_timezone) : std::array<std::string, 2>{};
+    const auto text = s.config.osd_enabled ? osd_text(frame, s.config.osd_timezone) : std::string{};
     auto* buffer = gst_buffer_new_allocate(nullptr, s.info.size, nullptr);
     if (!buffer) throw std::bad_alloc();
     GstMapInfo mapping{};

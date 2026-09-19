@@ -1,6 +1,5 @@
 #include "video_capture_service.hpp"
 #include "v4l2_video_source.hpp"
-#include "media/frame_rate.hpp"
 
 #include <chrono>
 #include <stdexcept>
@@ -149,7 +148,6 @@ void VideoCaptureService::run() noexcept {
             }
             // 偶发超时允许继续采集，连续超时后关闭设备并重新枚举。
             unsigned consecutive_timeouts = 0;
-            video::FrameRate capture_rate;
             while (!stop_) {
                 auto result = source_->read();
                 if (stop_) {
@@ -171,7 +169,6 @@ void VideoCaptureService::run() noexcept {
                 consecutive_timeouts = 0;
                 ++frames_;
                 result.frame.source_generation = source_generation;
-                result.frame.capture_fps = capture_rate.observe(result.frame.timestamp);
                 // 消费者跟不上时丢弃最旧帧，保持队列有界并优先提供近期画面。
                 if (queue_->try_push(std::move(result.frame), core::OverflowPolicy::drop_oldest)
                     == core::PushResult::closed) {
