@@ -12,6 +12,8 @@ bash script/deploy.sh --host elf@192.168.100.11
 
 部署包由 `script/package-monitor.sh` 复制 C++ 二进制、MediaMTX、Python 录像服务、网页、配置、systemd 文件和离线 deb 包。板端安装到 `/opt/rkmon`；录像和 SQLite 保留在 `/userdata/rkmon-video`，升级不会覆盖录像目录。
 
+服务控制脚本随部署安装到 `/opt/rkmon/script/`，包括 `start.sh`、`start_all.sh`、`stop.sh` 和 `stop_all.sh`。
+
 ## 服务关系
 
 | 服务 | 作用 | 主要配置 |
@@ -33,6 +35,17 @@ curl --fail http://127.0.0.1:9000/api/recordings/status
 sudo nginx -t
 ```
 
+服务生命周期脚本：
+
+```bash
+sudo bash script/start.sh       # 重启 rkmon
+sudo bash script/stop.sh        # 停止 rkmon
+sudo bash script/start_all.sh   # 停止 GDM，启动全部后台服务和本地屏幕
+sudo bash script/stop_all.sh    # 停止全部后台服务，恢复 GDM 桌面
+```
+
+`start_all.sh` 和 `stop_all.sh` 会改变本地显示模式；切换前应确保没有未保存的桌面操作。
+
 录像状态接口会返回索引服务状态、最后扫描时间、最后事件时间和磁盘空间。录像服务由 `elf` 运行，MediaMTX 也以 `elf` 运行；录像目录需要该用户可写。
 
 ## 故障处理
@@ -50,6 +63,6 @@ sudo nginx -t
 ## 本地屏幕
 
 新增 LVGL 本地屏幕随 `script/deploy.sh` 更新，使用系统级 KMSDRM 服务独占 DSI/DRM 输出；部署会停用 GDM，避免桌面合成器争用显示设备。
-用户服务 `rkmon-display` 显示视频、时间、天气及 STM32 温湿度，系统服务
+系统服务 `rkmon-display` 显示视频、时间、天气及 STM32 温湿度，系统服务
 `rkmon-weather` 更新天气缓存。配置、日志、停止方式和网络失败行为见
 [Display 模块](modules/display.md)。板端需要 SDL2、FreeType、json-c、MPP 插件和 Noto CJK 字体。

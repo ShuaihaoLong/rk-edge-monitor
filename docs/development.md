@@ -18,7 +18,7 @@ bash script/deploy.sh --dry-run
 bash script/deploy.sh --skip-build
 ```
 
-`start.sh` 前台运行并使用 `exec` 保留 PID、信号和退出码；脚本可从任意目录调用。ARM64 程序必须在板端运行。
+不带参数的 `start.sh` 在板端重启 `rkmon.service`；传入 `--target`、`--config` 或 `--binary` 时保持前台开发模式，并使用 `exec` 保留 PID、信号和退出码。脚本可从任意目录调用。ARM64 程序必须在板端运行。
 
 ## CMake 选项
 

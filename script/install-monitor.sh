@@ -5,7 +5,7 @@
 # 前提：ARM64、Python3/SQLite、ffprobe、Nginx、Rockchip GStreamer/RKNN、SDL2/FreeType/json-c 和中文字体，以 root 运行；
 #       包内含 bin/、config/、web/、models/、licenses/ 和 Mosquitto 软件包，无需联网。
 # 输出：/opt/rkmon；录像/SQLite 在 /userdata/rkmon-video（部署保留）；备份 /opt/rkmon-backup.*。
-# 副作用：更新服务及 9000 端口站点，启用开机启动并重启服务，elf 的 GNOME 会话自动打开本地屏幕；不修改其他 Nginx 站点。
+# 副作用：更新服务及 9000 端口站点，启用开机启动并重启服务，停用 GDM 并独占 DRM 显示；不修改其他 Nginx 站点。
 set -euo pipefail
 if [[ ${1:-} == --help || ${1:-} == -h ]]; then
     sed -n '2,8s/^# \{0,1\}//p' "${BASH_SOURCE[0]}"
@@ -14,7 +14,7 @@ fi
 [[ $# == 0 ]] || { echo '错误：不支持的参数' >&2; exit 2; }
 [[ $EUID == 0 && $(uname -m) == aarch64 ]] || { echo '错误：请在 ARM64 板卡上以 root 运行' >&2; exit 1; }
 source_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
-for file in bin/rkmon-display lib/display/weather.py config/display.json config/systemd/rkmon-display.service config/systemd/rkmon-weather.service licenses/LVGL-LICENSE lib/recording/service.py lib/recording/notify.py config/recording.ini config/systemd/rkmon-recording.service web/recordings.html web/recordings.js web/recordings.css bin/rkmon bin/mediamtx config/rkmon.ini config/mediamtx.yml config/nginx-monitor.conf config/mosquitto-rkmon.conf config/systemd/rkmon.service config/systemd/mediamtx.service web/index.html web/player.js web/vendor/reader.js web/vendor/mqtt.min.js web/detections.js web/device-status.js models/yolov8n.rknn models/coco_80_labels_list.txt licenses/RKNN-Model-Zoo-LICENSE packages/SHA256SUMS; do
+for file in bin/rkmon-display lib/display/weather.py config/display.json config/systemd/rkmon-display.service config/systemd/rkmon-weather.service licenses/LVGL-LICENSE lib/recording/service.py lib/recording/notify.py config/recording.ini config/systemd/rkmon-recording.service web/recordings.html web/recordings.js web/recordings.css bin/rkmon bin/mediamtx config/rkmon.ini config/mediamtx.yml config/nginx-monitor.conf config/mosquitto-rkmon.conf config/systemd/rkmon.service config/systemd/mediamtx.service web/index.html web/player.js web/vendor/reader.js web/vendor/mqtt.min.js web/detections.js web/device-status.js models/yolov8n.rknn models/coco_80_labels_list.txt licenses/RKNN-Model-Zoo-LICENSE packages/SHA256SUMS script/start.sh script/start_all.sh script/stop.sh script/stop_all.sh; do
     [[ -f $source_dir/$file ]] || { echo "错误：缺少 $file" >&2; exit 1; }
 done
 id elf >/dev/null
@@ -73,7 +73,7 @@ fi
 systemctl disable --now gdm3.service 2>/dev/null || true
 systemctl stop rkmon-weather.service 2>/dev/null || true
 systemctl stop rkmon.service mediamtx.service rkmon-recording.service 2>/dev/null || true
-install -d -m 755 /opt/rkmon/lib/recording /opt/rkmon/lib/display /opt/rkmon/bin /opt/rkmon/config /opt/rkmon/web /opt/rkmon/models /opt/rkmon/licenses
+install -d -m 755 /opt/rkmon/lib/recording /opt/rkmon/lib/display /opt/rkmon/bin /opt/rkmon/config /opt/rkmon/web /opt/rkmon/models /opt/rkmon/licenses /opt/rkmon/script
 install -d -m 755 -o elf -g "$(id -gn elf)" /opt/rkmon/logs
 # 录像目录独立于部署目录，不参与覆盖和程序备份。
 install -d -m 755 -o elf -g "$(id -gn elf)" /userdata/rkmon-video
@@ -89,6 +89,7 @@ install -m 644 "$source_dir/config/systemd/"{rkmon,mediamtx,rkmon-recording,rkmo
 rm -f /home/elf/.config/systemd/user/rkmon-display.service /home/elf/.config/autostart/rkmon-display.desktop
 install -m 644 "$source_dir/config/nginx-monitor.conf" /etc/nginx/sites-available/rkmon
 install -m 644 "$source_dir/config/mosquitto-rkmon.conf" /etc/mosquitto/conf.d/rkmon.conf
+install -m 755 "$source_dir/script/"{start,start_all,stop,stop_all}.sh /opt/rkmon/script/
 ln -sfn /etc/nginx/sites-available/rkmon /etc/nginx/sites-enabled/rkmon
 nginx -t
 systemctl daemon-reload

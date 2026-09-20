@@ -54,7 +54,7 @@ cp "$project_dir/config/"{rkmon.ini,recording.ini,mediamtx.yml,nginx-monitor.con
 cp "$project_dir/config/systemd/"{rkmon,mediamtx,rkmon-recording}.service "$payload/config/systemd/"
 cp "$project_dir/src/recording/"{service,notify}.py "$payload/lib/recording/"
 cp -R "$project_dir/web" "$payload/"
-cp "$script_dir/install-monitor.sh" "$payload/script/"
+cp "$script_dir/"{install-monitor,start_all,start,stop_all,stop}.sh "$payload/script/"
 mkdir -p "$project_dir/build/deploy"
 tar -czf "$project_dir/build/deploy/rkmon-deploy.tar.gz" -C "$staging" rkmon-deploy
 printf '部署包：%s/build/deploy/rkmon-deploy.tar.gz\n' "$project_dir"
