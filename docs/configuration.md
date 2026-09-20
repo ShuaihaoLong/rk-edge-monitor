@@ -55,3 +55,9 @@
 ## 录像配置
 
 录像索引服务使用 [config/recording.ini](../config/recording.ini)：`root` 为录像目录，`event_socket` 为通知 Socket，`port` 为本机 API 端口，`timezone` 为显示时区，`retain_days` 为保留天数，`reserve_mib` 为磁盘保留空间，`max_gib=0` 表示不启用总容量上限。
+
+## 本地显示配置
+
+`config/display.json` 独立配置屏幕时区、中文字体及天气缓存路径/更新间隔。
+本地程序复用 `rkmon.ini` 的 RTSP 和 STM32/MQTT 配置，不另开摄像头或串口。
+详见 [Display](modules/display.md)。

@@ -1,0 +1,6 @@
+{
+  "timezone": "Asia/Shanghai",
+  "font": "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
+  "weather_cache": "/var/cache/rkmon-weather/weather.json",
+  "weather_interval_seconds": 900
+}

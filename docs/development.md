@@ -10,6 +10,7 @@
 
 ```bash
 bash script/build.sh --target host --test
+bash script/prepare-display-deps.sh
 bash script/build.sh --target rk3588 --jobs 4
 ctest --test-dir build/host --output-on-failure
 bash script/start.sh --target host --config /tmp/rkmon.ini
@@ -26,6 +27,7 @@ bash script/deploy.sh --skip-build
 - `RKMON_WITH_GSTREAMER`：GStreamer 解码和 RTSP 发布；aarch64 默认开启。
 - `RKMON_WITH_RGA`：RGA 帧复制或 AI 预处理；aarch64 默认开启。
 - `RKMON_WITH_RKNN`：RKNN Runtime 和 YOLOv8 后处理；aarch64 默认开启。
+- `RKMON_WITH_LOCAL_DISPLAY`：LVGL 本地屏幕；ARM64 默认开启，要求先准备固定版本 LVGL 和 SDL2/FreeType/json-c 开发文件。
 - `RKMON_BUILD_TESTS`：构建测试；默认开启。
 
 不同目标使用不同 build 目录，不要混用 CMake cache。切换 sysroot 时建议创建新的 build 目录。

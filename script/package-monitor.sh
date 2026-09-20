@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# 用途：将 ARM64 主程序、MediaMTX、网页和配置打成离线部署包。
+# 用途：将 ARM64 主程序、MediaMTX、本地屏幕、网页和配置打成离线部署包。
 # 示例：bash script/package-monitor.sh
 #       bash script/package-monitor.sh --archive /路径/mediamtx_v1.21.0_linux_arm64.tar.gz
 # 参数：--archive 指定 MediaMTX 安装包；无环境变量；--help 显示说明。
-# 前提：先运行 build.sh、prepare-ai-probe.py 和 prepare-mqtt-deps.sh，准备 ARM64 依赖及 sha256sum/tar。
+# 前提：先运行 build.sh、prepare-display-deps.sh、prepare-ai-probe.py 和 prepare-mqtt-deps.sh，准备 ARM64 依赖及 sha256sum/tar。
 # 输出：build/deploy/rkmon-deploy.tar.gz；默认从 .local/downloads/ 读取安装包。
 # 副作用：覆盖上次部署包，不下载文件，不连接板卡，不修改源码和板端服务。
 set -euo pipefail
@@ -35,6 +35,8 @@ cp "$project_dir/.local/ai-stage4/zoo/examples/yolov8/model/coco_80_labels_list.
 cp "$project_dir/third_party/rknn_yolov8/LICENSE" "$payload/licenses/RKNN-Model-Zoo-LICENSE"
 package_dir=$project_dir/.local/downloads/mosquitto-arm64
 bash "$script_dir/prepare-mqtt-deps.sh" --offline
+bash "$script_dir/prepare-display-deps.sh" --offline
+[[ -f $project_dir/build/rk3588/src/display/rkmon-display ]] || { echo '错误：缺少本地屏幕程序' >&2; exit 1; }
 cp "$package_dir/"*.deb "$payload/packages/"
 (
     cd "$payload/packages"
@@ -42,6 +44,12 @@ cp "$package_dir/"*.deb "$payload/packages/"
 )
 tar -xzf "$archive" -C "$payload/bin" mediamtx
 cp "$project_dir/build/rk3588/src/app/rkmon" "$payload/bin/"
+cp "$project_dir/build/rk3588/src/display/rkmon-display" "$payload/bin/"
+mkdir -p "$payload/lib/display"
+cp "$project_dir/src/display/weather.py" "$payload/lib/display/"
+cp "$project_dir/config/display.json" "$payload/config/"
+cp "$project_dir/config/systemd/"{rkmon-display,rkmon-weather}.service "$payload/config/systemd/"
+cp "$project_dir/.local/lvgl/source/LICENCE.txt" "$payload/licenses/LVGL-LICENSE"
 cp "$project_dir/config/"{rkmon.ini,recording.ini,mediamtx.yml,nginx-monitor.conf,mosquitto-rkmon.conf} "$payload/config/"
 cp "$project_dir/config/systemd/"{rkmon,mediamtx,rkmon-recording}.service "$payload/config/systemd/"
 cp "$project_dir/src/recording/"{service,notify}.py "$payload/lib/recording/"

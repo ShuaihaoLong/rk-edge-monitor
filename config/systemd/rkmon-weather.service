@@ -1,0 +1,21 @@
+[Unit]
+Description=RKMon local weather cache
+After=network-online.target
+Wants=network-online.target
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+User=elf
+CacheDirectory=rkmon-weather
+ExecStart=/usr/bin/python3 /opt/rkmon/lib/display/weather.py --settings /opt/rkmon/config/display.json
+Restart=on-failure
+RestartSec=15
+TimeoutStopSec=15
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

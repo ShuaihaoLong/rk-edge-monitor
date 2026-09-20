@@ -46,3 +46,10 @@ sudo nginx -t
 ## 安全边界
 
 当前配置面向可信局域网，没有登录、TLS 或公网认证。MediaMTX 的 RTSP、Playback 和 WebRTC 发布入口绑定本机，网页仅通过 Nginx 暴露。不要把 9000 端口直接映射到不可信网络；更换板卡地址时同步修改 MediaMTX WebRTC allow-origin 和 additional-host 配置。
+
+## 本地屏幕
+
+新增 LVGL 本地屏幕随 `script/deploy.sh` 更新，使用系统级 KMSDRM 服务独占 DSI/DRM 输出；部署会停用 GDM，避免桌面合成器争用显示设备。
+用户服务 `rkmon-display` 显示视频、时间、天气及 STM32 温湿度，系统服务
+`rkmon-weather` 更新天气缓存。配置、日志、停止方式和网络失败行为见
+[Display 模块](modules/display.md)。板端需要 SDL2、FreeType、json-c、MPP 插件和 Noto CJK 字体。

@@ -110,3 +110,8 @@ if(NOT CMAKE_CROSSCOMPILING)
     add_test(NAME recording_index COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/recording_tests.py")
     set_tests_properties(recording_index PROPERTIES TIMEOUT 30)
 endif()
+
+if(NOT CMAKE_CROSSCOMPILING)
+    add_test(NAME display_weather COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/display_weather_tests.py")
+    set_tests_properties(display_weather PROPERTIES ENVIRONMENT "PYTHONDONTWRITEBYTECODE=1" TIMEOUT 15)
+endif()

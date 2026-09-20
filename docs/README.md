@@ -14,16 +14,18 @@
 | V4L2 相机采集 | [Camera](modules/camera.md) |
 | GStreamer 解码、OSD、编码和 RTSP | [Media](modules/media.md) |
 | RKNN/RGA 推理和检测事件 | [AI](modules/ai.md) |
+| 本地 LVGL 屏幕、天气和传感器 | [Display](modules/display.md) |
 | MQTT 状态和消息接口 | [MQTT](modules/mqtt.md) |
 | STM32 串口协议和 MQTT 桥接 | [STM32](modules/stm32.md) |
 | MediaMTX 录像、索引和回放 | [Recording](modules/recording.md) |
 
 ## 当前边界
 
-工程包含两类运行单元：
+工程包含以下运行单元：
 
 - `rkmon`：C++17 主程序，负责配置、服务生命周期、相机、视频处理、AI、MQTT 和 STM32。
-- 板端配套进程：MediaMTX、`rkmon-recording` Python 服务、Nginx、Mosquitto，由 systemd 管理。
+- `rkmon-display`：独立 LVGL 本地屏幕，订阅本机 RTSP 和 STM32 MQTT。
+- 板端配套进程：MediaMTX、`rkmon-recording` Python 服务、Nginx、Mosquitto 及天气缓存服务，由 systemd 管理。
 
 `src/recording` 和 `web/` 不属于根 CMake 的 C++ 编译目标。录像 Python 服务通过部署包安装，由 systemd 直接运行；网页由 Nginx 提供。
 

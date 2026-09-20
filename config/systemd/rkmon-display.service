@@ -1,0 +1,22 @@
+[Unit]
+Description=RKMon local LVGL display
+After=mediamtx.service systemd-udev-settle.service
+Requires=mediamtx.service
+Conflicts=gdm3.service
+Before=gdm3.service
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+User=elf
+SupplementaryGroups=video render
+Environment=SDL_VIDEODRIVER=kmsdrm
+Environment=SDL_KMSDRM_DEVICE_INDEX=0
+ExecStart=/opt/rkmon/bin/rkmon-display --config /opt/rkmon/config/rkmon.ini --settings /opt/rkmon/config/display.json
+Restart=on-failure
+RestartSec=3
+TimeoutStopSec=15
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target

@@ -10,6 +10,9 @@ flowchart LR
     decode --> ai[AI Service]
     decode --> stream[VideoStreamService]
     stream --> rtsp[MediaMTX RTSP]
+    rtsp --> display[LVGL 本地屏幕]
+    mqtt --> display
+    weather[天气缓存] --> display
     rtsp --> browser[WebRTC / 浏览器]
     rtsp --> record[MediaMTX Recording]
     record --> index[rkmon-recording / SQLite]
@@ -33,6 +36,8 @@ flowchart LR
 
 - `mediamtx.service`：接收 `rkmon` 发布的 RTSP，提供 WebRTC、录像切片和 Playback API。
 - `rkmon-recording.service`：运行 `src/recording/service.py`，维护录像 SQLite 索引、AI 事件和容量清理。
+- `rkmon-display.service`：elf 用户图形会话内的 LVGL 本地监控。
+- `rkmon-weather.service`：IP 城市定位、合肥回退和天气缓存更新。
 - `mosquitto.service`：提供 MQTT broker。
 - `nginx.service`：提供静态网页、录像 API、Playback 代理和 WebRTC 同源入口。
 

@@ -3,7 +3,7 @@
 # 示例：bash script/deploy.sh；bash script/deploy.sh --host elf@192.168.100.11 --skip-build
 # 参数：--host SSH 目标（默认 elf@192.168.100.11）；--jobs 构建并行数（默认 4）；
 #       --archive MediaMTX 包路径；--skip-build 复用已有 ARM64 程序；--dry-run 仅显示计划；--help。
-# 前提：PC 有 Bash、SSH 密钥、交叉编译工具及已准备的媒体/AI/MQTT 包；板端有 Nginx、MPP/GStreamer、RKNN、sudo。
+# 前提：PC 有 Bash、SSH 密钥、交叉编译工具及已准备的媒体/AI/MQTT 包；板端有 Nginx、MPP/GStreamer、RKNN、SDL2/FreeType/json-c、中文字体、sudo。
 # 输出：build/deploy/rkmon-deploy.tar.gz；板端 /opt/rkmon 和 /opt/rkmon-backup.*；无环境变量。
 # 副作用：短暂停流，覆盖程序、网页和项目配置，启用/重启服务；sudo 可能在终端询问密码，不保存密码。
 set -euo pipefail
@@ -54,4 +54,5 @@ ssh "${ssh_options[@]}" "$host" "tar -xzf - -C '$remote_dir'" < "$project_dir/bu
 # 安装和清理放在同一条 sudo 会话中，避免 root 生成的 __pycache__ 留在上传目录。
 ssh -tt "${ssh_options[@]}" "$host" "sudo bash '$remote_dir/rkmon-deploy/script/install-monitor.sh'; install_status=\$?; sudo rm -rf -- '$remote_dir'; exit \$install_status"
 ssh "${ssh_options[@]}" "$host" 'sleep 3; systemctl is-active --quiet rkmon && systemctl is-active --quiet mediamtx && systemctl is-active --quiet rkmon-recording && systemctl is-active --quiet mosquitto && systemctl is-active --quiet nginx && curl --noproxy "*" --fail --silent --output /dev/null --max-time 5 http://127.0.0.1:9000/ && curl --noproxy "*" --fail --silent --output /dev/null --max-time 5 http://127.0.0.1:9000/api/recordings/status'
-echo '部署完成：服务运行且监控页面返回成功。请在浏览器确认实际画面。'
+ssh "${ssh_options[@]}" "$host" 'systemctl is-active --quiet rkmon-weather && systemctl is-active --quiet rkmon-display && ! systemctl is-active --quiet gdm3'
+echo '部署完成：监控、天气和本地屏幕服务运行，监控页面返回成功。'

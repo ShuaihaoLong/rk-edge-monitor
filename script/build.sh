@@ -3,9 +3,9 @@
 # 使用：bash script/build.sh [--target host|rk3588] [--jobs 正整数] [--test]
 #       bash script/build.sh --help
 # 默认：target=rk3588；build/<target> 存放产物，RK3588_SYSROOT 可覆盖板端快照路径。
-# 前提：主机编译需要 g++；交叉编译需要 ARM64 GCC/G++ 和已准备好的 sysroot。
+# 前提：主机编译需要 g++；交叉编译需要 ARM64 GCC/G++、sysroot 和 prepare-display-deps.sh 准备的 LVGL。
 # 行为：--test 仅在 host 模式运行 CTest，禁止在 WSL 直接运行 ARM64 程序。
-# 输出：build/<target>/src/app/rkmon、compile_commands.json 和测试程序。
+# 输出：build/<target>/src/app/rkmon、ARM64 的 src/display/rkmon-display、compile_commands.json 和测试程序。
 # 说明：从任意目录调用均可；不下载依赖、不部署到板卡、不修改第三方源码。
 set -euo pipefail
 usage() { sed -n '2,9s/^# \{0,1\}//p' "${BASH_SOURCE[0]}"; }
