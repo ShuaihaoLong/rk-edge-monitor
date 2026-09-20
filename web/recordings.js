@@ -102,8 +102,13 @@
   };
   video.onerror=()=>message('录像加载失败，可能已被清理；请刷新列表后重试。');
   $('recording-speed').onchange=()=>{video.playbackRate=Number($('recording-speed').value);};
-  $('skip-back').onclick=()=>{if(windowInfo)play(windowInfo.start_ms+(video.currentTime-10)*1000);};
-  $('skip-forward').onclick=()=>{if(windowInfo)play(windowInfo.start_ms+(video.currentTime+10)*1000);};
+  $('skip-back').onclick=()=>{
+    if(windowInfo) video.currentTime=Math.max(0,video.currentTime-10);
+  };
+  $('skip-forward').onclick=()=>{
+    if(windowInfo && Number.isFinite(video.duration))
+      video.currentTime=Math.min(video.duration,video.currentTime+10);
+  };
   date.onchange=()=>{++playbackToken;video.pause();video.removeAttribute('src');video.load();windowInfo=null;load();};
   $('recording-days').onchange=event=>{if(event.target.value){date.value=event.target.value;date.onchange();}};
   $('recording-refresh').onclick=load;
