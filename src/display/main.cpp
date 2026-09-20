@@ -178,7 +178,7 @@ int main(int argc, char** argv) {
         std::vector<std::uint32_t> draw(1024 * 100);
         lv_display_set_buffers(display, draw.data(), nullptr, draw.size() * 4, LV_DISPLAY_RENDER_MODE_PARTIAL);
         lv_display_set_user_data(display, &s); lv_display_set_flush_cb(display, flush);
-        lv_obj_set_style_bg_color(lv_screen_active(), lv_color_hex(0x111b28), 0);
+        lv_obj_set_style_bg_color(lv_screen_active(), lv_color_hex(0x2a211c), 0);
         auto* font = lv_freetype_font_create(font_path.c_str(), LV_FREETYPE_FONT_RENDER_MODE_BITMAP, 20, LV_FREETYPE_FONT_STYLE_NORMAL);
         if (!font) throw std::runtime_error("cannot load CJK font");
         auto* compact_font = lv_freetype_font_create(font_path.c_str(), LV_FREETYPE_FONT_RENDER_MODE_BITMAP, 16, LV_FREETYPE_FONT_STYLE_NORMAL);
