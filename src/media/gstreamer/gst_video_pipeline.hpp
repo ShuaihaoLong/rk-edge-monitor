@@ -13,6 +13,7 @@ public:
     std::optional<camera::VideoFrame> decode(const camera::VideoFrame& input) override;
     void request_stop() noexcept override;
     void close() noexcept override;
+
 private:
     struct Impl;
     std::unique_ptr<Impl> impl_;

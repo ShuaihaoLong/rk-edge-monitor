@@ -12,7 +12,12 @@ import urllib.parse
 import urllib.request
 from pathlib import Path
 
-FALLBACK = {'city': '合肥', 'latitude': 31.8206, 'longitude': 117.2272, 'location_source': 'fallback'}
+FALLBACK = {
+    'city': '合肥',
+    'latitude': 31.8206,
+    'longitude': 117.2272,
+    'location_source': 'fallback',
+}
 
 
 def fetch(url):
@@ -28,18 +33,32 @@ def fetch(url):
 
 
 def numeric(value, lower, upper):
-    return isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value) and lower <= value <= upper
+    return (
+        isinstance(value, (int, float))
+        and not isinstance(value, bool)
+        and math.isfinite(value)
+        and lower <= value <= upper
+    )
 
 
 def location(fetcher=fetch):
     try:
         data = fetcher('https://ipapi.co/json/')
-        if data.get('error') or not numeric(data.get('latitude'), -90, 90) or not numeric(data.get('longitude'), -180, 180):
+        if (
+            data.get('error')
+            or not numeric(data.get('latitude'), -90, 90)
+            or not numeric(data.get('longitude'), -180, 180)
+        ):
             raise ValueError('invalid location')
         city = data.get('city')
         if not isinstance(city, str) or not city.strip():
             raise ValueError('missing city')
-        return {'city': city[:40], 'latitude': data['latitude'], 'longitude': data['longitude'], 'location_source': 'ip'}
+        return {
+            'city': city[:40],
+            'latitude': data['latitude'],
+            'longitude': data['longitude'],
+            'location_source': 'ip',
+        }
     except (OSError, ValueError, TypeError):
         return dict(FALLBACK)
 
@@ -65,17 +84,32 @@ def description(code):
 def update(previous, fetcher=fetch, now=None):
     now = time.time() if now is None else now
     place = location(fetcher)
-    query = urllib.parse.urlencode({'latitude': place['latitude'], 'longitude': place['longitude'],
-                                   'current': 'temperature_2m,weather_code', 'timezone': 'auto'})
+    query = urllib.parse.urlencode(
+        {
+            'latitude': place['latitude'],
+            'longitude': place['longitude'],
+            'current': 'temperature_2m,weather_code',
+            'timezone': 'auto',
+        }
+    )
     try:
         data = fetcher('https://api.open-meteo.com/v1/forecast?' + query)
         current = data['current']
         temperature, code = current['temperature_2m'], current['weather_code']
         if not numeric(temperature, -100, 70) or not numeric(code, 0, 99) or int(code) != code:
             raise ValueError('invalid weather values')
-        return dict(place, schema=1, status='ok', temperature_c=temperature, description=description(code),
-                    weather_code=code, updated_at=now, attempted_at=now,
-                    source_time=current.get('time', ''), source='Open-Meteo')
+        return dict(
+            place,
+            schema=1,
+            status='ok',
+            temperature_c=temperature,
+            description=description(code),
+            weather_code=code,
+            updated_at=now,
+            attempted_at=now,
+            source_time=current.get('time', ''),
+            source='Open-Meteo',
+        )
     except (OSError, ValueError, TypeError, KeyError):
         # 保留城市和读数配对，定位变化但天气失败时不能把旧读数标成新城市。
         if isinstance(previous, dict) and numeric(previous.get('updated_at'), 1, now + 60):

@@ -11,8 +11,13 @@ namespace rkmon::mqtt {
 // 订阅客户端须持续调用 receive，处理报文、订阅确认和保活。
 class MqttClient {
 public:
-    struct Message { std::string topic, payload; bool retained{}; };
-    explicit MqttClient(Config config, std::string client_suffix = {}, std::string status_topic = {});
+    struct Message {
+        std::string topic, payload;
+        bool retained{};
+    };
+
+    explicit MqttClient(Config config, std::string client_suffix = {},
+                        std::string status_topic = {});
     ~MqttClient();
     void connect(const std::string& will_payload);
     void publish(const std::string& payload);
@@ -20,8 +25,15 @@ public:
     void subscribe(const std::string& topic);
     std::vector<Message> receive(int timeout_ms);
     void disconnect(const std::string& offline_payload) noexcept;
-    [[nodiscard]] bool connected() const noexcept { return socket_ >= 0; }
-    [[nodiscard]] const std::string& topic() const noexcept { return topic_; }
+
+    [[nodiscard]] bool connected() const noexcept {
+        return socket_ >= 0;
+    }
+
+    [[nodiscard]] const std::string& topic() const noexcept {
+        return topic_;
+    }
+
 private:
     void send_packet(unsigned char header, const std::string& payload);
     void close_socket() noexcept;

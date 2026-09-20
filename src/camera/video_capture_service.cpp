@@ -11,20 +11,22 @@ namespace {
 
 std::int64_t now_ns() {
     return std::chrono::duration_cast<std::chrono::nanoseconds>(
-        std::chrono::steady_clock::now().time_since_epoch()).count();
+               std::chrono::steady_clock::now().time_since_epoch())
+        .count();
 }
 
 } // namespace
 
 VideoCaptureService::VideoCaptureService(CaptureConfig config, std::size_t capacity,
-                                       std::shared_ptr<spdlog::logger> logger)
+                                         std::shared_ptr<spdlog::logger> logger)
     : VideoCaptureService(std::make_unique<V4L2VideoSource>(config), capacity,
                           config.max_consecutive_timeouts, std::move(logger),
                           config.reconnect_interval_ms) {}
 
 VideoCaptureService::VideoCaptureService(std::unique_ptr<IVideoSource> source, std::size_t capacity,
-                                       unsigned max_timeouts, std::shared_ptr<spdlog::logger> logger,
-                                       unsigned reconnect_interval_ms)
+                                         unsigned max_timeouts,
+                                         std::shared_ptr<spdlog::logger> logger,
+                                         unsigned reconnect_interval_ms)
     : source_(std::move(source)), queue_capacity_(capacity), max_timeouts_(max_timeouts),
       reconnect_interval_ms_(reconnect_interval_ms), logger_(std::move(logger)) {
     if (!source_ || capacity == 0 || max_timeouts == 0 || reconnect_interval_ms == 0) {
@@ -91,8 +93,9 @@ void VideoCaptureService::join() noexcept {
         try {
             if (logger_) {
                 const auto snapshot = stats();
-                logger_->info("[video_capture] frames={}, fps={:.2f}, queue_dropped={}, timeouts={}",
-                              snapshot.frames, snapshot.fps, snapshot.dropped, snapshot.timeouts);
+                logger_->info(
+                    "[video_capture] frames={}, fps={:.2f}, queue_dropped={}, timeouts={}",
+                    snapshot.frames, snapshot.fps, snapshot.dropped, snapshot.timeouts);
             }
         } catch (...) {
             // 停止阶段的日志失败不能阻断资源回收。
@@ -142,9 +145,10 @@ void VideoCaptureService::run() noexcept {
             state_ = core::ServiceState::running;
             if (logger_) {
                 const auto actual = source_->negotiated_format();
-                logger_->info("[video_capture] online: {}x{}, format={}, stride={}, interval={}/{} s, queue_capacity={}",
-                              actual.width, actual.height, static_cast<int>(actual.format), actual.stride,
-                              actual.interval_numerator, actual.interval_denominator, queue_capacity_);
+                logger_->info(
+                    "[video_capture] online: {}x{}, format={}, stride={}, interval={}/{} s, queue_capacity={}",
+                    actual.width, actual.height, static_cast<int>(actual.format), actual.stride,
+                    actual.interval_numerator, actual.interval_denominator, queue_capacity_);
             }
             // 偶发超时允许继续采集，连续超时后关闭设备并重新枚举。
             unsigned consecutive_timeouts = 0;
@@ -162,7 +166,8 @@ void VideoCaptureService::run() noexcept {
                 if (result.status == ReadStatus::timeout) {
                     ++timeouts_;
                     if (++consecutive_timeouts >= max_timeouts_) {
-                        throw std::runtime_error("camera exceeded consecutive capture timeout limit");
+                        throw std::runtime_error(
+                            "camera exceeded consecutive capture timeout limit");
                     }
                     continue;
                 }
@@ -170,8 +175,8 @@ void VideoCaptureService::run() noexcept {
                 ++frames_;
                 result.frame.source_generation = source_generation;
                 // 消费者跟不上时丢弃最旧帧，保持队列有界并优先提供近期画面。
-                if (queue_->try_push(std::move(result.frame), core::OverflowPolicy::drop_oldest)
-                    == core::PushResult::closed) {
+                if (queue_->try_push(std::move(result.frame), core::OverflowPolicy::drop_oldest) ==
+                    core::PushResult::closed) {
                     break;
                 }
             }
@@ -184,9 +189,11 @@ void VideoCaptureService::run() noexcept {
             }
             state_ = core::ServiceState::degraded;
             try {
-                if (logger_) logger_->warn("[video_capture] offline: {}; retry in {}ms",
-                                           error.what(), reconnect_interval_ms_);
-            } catch (...) {}
+                if (logger_)
+                    logger_->warn("[video_capture] offline: {}; retry in {}ms", error.what(),
+                                  reconnect_interval_ms_);
+            } catch (...) {
+            }
             // 分段等待使 SIGTERM 不必等待完整重试周期。
             for (unsigned i = 0; i < (reconnect_interval_ms_ + 19) / 20 && !stop_; ++i)
                 std::this_thread::sleep_for(std::chrono::milliseconds(20));

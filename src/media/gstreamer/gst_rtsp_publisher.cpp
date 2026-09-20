@@ -17,9 +17,11 @@ namespace rkmon::video {
 namespace {
 std::int64_t now_ns() {
     return std::chrono::duration_cast<std::chrono::nanoseconds>(
-        std::chrono::steady_clock::now().time_since_epoch()).count();
+               std::chrono::steady_clock::now().time_since_epoch())
+        .count();
 }
 }
+
 struct GstRtspPublisher::Impl {
     StreamConfig config;
     GstElement* pipeline{nullptr};
@@ -51,7 +53,10 @@ GstRtspPublisher::GstRtspPublisher(StreamConfig config) : impl_(std::make_unique
     }
     impl_->config = std::move(config);
 }
-GstRtspPublisher::~GstRtspPublisher() { close(); }
+
+GstRtspPublisher::~GstRtspPublisher() {
+    close();
+}
 
 void GstRtspPublisher::open() {
     auto& s = *impl_;
@@ -75,7 +80,8 @@ void GstRtspPublisher::open() {
             "! mpph264enc name=encoder profile=baseline header-mode=each-idr "
             "! h264parse name=parser config-interval=-1 "
             "! video/x-h264,stream-format=byte-stream,alignment=au "
-            "! rtspclientsink name=publisher protocols=tcp latency=0 tcp-timeout=3000000", &error);
+            "! rtspclientsink name=publisher protocols=tcp latency=0 tcp-timeout=3000000",
+            &error);
         if (error || !s.pipeline) {
             const std::string reason = error ? error->message : "cannot create publisher pipeline";
             g_clear_error(&error);
@@ -84,7 +90,8 @@ void GstRtspPublisher::open() {
         s.source = gst_bin_get_by_name(GST_BIN(s.pipeline), "input");
         s.bus = gst_element_get_bus(s.pipeline);
         auto* encoder = gst_bin_get_by_name(GST_BIN(s.pipeline), "encoder");
-        g_object_set(encoder, "bps", s.config.bitrate, "gop", static_cast<int>(s.config.gop), nullptr);
+        g_object_set(encoder, "bps", s.config.bitrate, "gop", static_cast<int>(s.config.gop),
+                     nullptr);
         gst_object_unref(encoder);
         auto* publisher = gst_bin_get_by_name(GST_BIN(s.pipeline), "publisher");
         // URL 作为属性设置，不能拼接进 parse_launch 字符串。
@@ -107,9 +114,12 @@ void GstRtspPublisher::open() {
 
 void GstRtspPublisher::check_health() {
     auto& s = *impl_;
-    if (s.stop) return;
-    if (!s.pipeline) throw std::logic_error("publisher is not open");
-    auto* message = gst_bus_pop_filtered(s.bus, static_cast<GstMessageType>(GST_MESSAGE_ERROR | GST_MESSAGE_EOS));
+    if (s.stop)
+        return;
+    if (!s.pipeline)
+        throw std::logic_error("publisher is not open");
+    auto* message = gst_bus_pop_filtered(
+        s.bus, static_cast<GstMessageType>(GST_MESSAGE_ERROR | GST_MESSAGE_EOS));
     if (message) {
         std::string reason = "unexpected publisher EOS";
         if (GST_MESSAGE_TYPE(message) == GST_MESSAGE_ERROR) {
@@ -123,14 +133,16 @@ void GstRtspPublisher::check_health() {
         gst_message_unref(message);
         throw std::runtime_error(reason);
     }
-    if (s.submitted && now_ns() - s.last_encoded.load() > static_cast<std::int64_t>(s.config.timeout_ms) * 1000000) {
+    if (s.submitted && now_ns() - s.last_encoded.load() >
+                           static_cast<std::int64_t>(s.config.timeout_ms) * 1000000) {
         throw std::runtime_error("encoder stalled or input stream interrupted");
     }
 }
 
 void GstRtspPublisher::write(const camera::VideoFrame& frame) {
     auto& s = *impl_;
-    if (s.stop) return;
+    if (s.stop)
+        return;
     check_health();
     const auto width = frame.width;
     const auto height = frame.height;
@@ -152,57 +164,75 @@ void GstRtspPublisher::write(const camera::VideoFrame& frame) {
     }
     s.previous = frame.timestamp;
     const auto text = s.config.osd_enabled ? osd_text(frame, s.config.osd_timezone) : std::string{};
-    GstBuffer* buffer=nullptr;
-    std::unique_ptr<GstBuffer,decltype(&gst_buffer_unref)> guard(nullptr,&gst_buffer_unref);
+    GstBuffer* buffer = nullptr;
+    std::unique_ptr<GstBuffer, decltype(&gst_buffer_unref)> guard(nullptr, &gst_buffer_unref);
 #ifdef RKMON_WITH_RGA
-    if(frame.dma) {
-        std::shared_ptr<const media::DmaBuffer> dma=frame.dma;
-        std::size_t stride=frame.stride,uv_offset=frame.uv_offset;
-        if(s.config.osd_enabled) {
-            const int aligned_width=(width+15)&~15,aligned_height=(height+15)&~15;
-            const auto bytes=static_cast<std::size_t>(aligned_width)*aligned_height*3/2;
+    if (frame.dma) {
+        std::shared_ptr<const media::DmaBuffer> dma = frame.dma;
+        std::size_t stride = frame.stride, uv_offset = frame.uv_offset;
+        if (s.config.osd_enabled) {
+            const int aligned_width = (width + 15) & ~15, aligned_height = (height + 15) & ~15;
+            const auto bytes = static_cast<std::size_t>(aligned_width) * aligned_height * 3 / 2;
             std::shared_ptr<media::DmaBuffer> target;
-            for(auto& item:s.osd_pool)if(item.use_count()==1 && item->size==bytes){target=item;break;}
-            if(!target) {
+            for (auto& item : s.osd_pool)
+                if (item.use_count() == 1 && item->size == bytes) {
+                    target = item;
+                    break;
+                }
+            if (!target) {
                 // 编码器仍持有的缓冲区不能改写；池满时只丢弃本次未编码原始帧。
-                if(s.osd_pool.size()>=8)return;
-                target=media::allocate_dma_buffer(bytes);s.osd_pool.push_back(target);
+                if (s.osd_pool.size() >= 8)
+                    return;
+                target = media::allocate_dma_buffer(bytes);
+                s.osd_pool.push_back(target);
             }
-            media::rga_copy_nv12(frame,*target,aligned_width,aligned_height);
-            media::DmaMapping mapping(target,true);
-            stride=aligned_width;uv_offset=stride*aligned_height;
-            draw_osd(mapping.data(),stride,mapping.data()+uv_offset,stride,width,height,text);
-            mapping.finish();dma=std::move(target);
+            media::rga_copy_nv12(frame, *target, aligned_width, aligned_height);
+            media::DmaMapping mapping(target, true);
+            stride = aligned_width;
+            uv_offset = stride * aligned_height;
+            draw_osd(mapping.data(), stride, mapping.data() + uv_offset, stride, width, height,
+                     text);
+            mapping.finish();
+            dma = std::move(target);
         }
-        buffer=gst_buffer_new();
-        if(!buffer)throw std::bad_alloc();
+        buffer = gst_buffer_new();
+        if (!buffer)
+            throw std::bad_alloc();
         guard.reset(buffer);
-        auto retained=std::make_unique<std::shared_ptr<const media::DmaBuffer>>(dma);
-        auto* allocator=gst_dmabuf_allocator_new();
-        auto* memory=gst_dmabuf_allocator_alloc_with_flags(allocator,dma->fd,dma->size,GST_FD_MEMORY_FLAG_DONT_CLOSE);
+        auto retained = std::make_unique<std::shared_ptr<const media::DmaBuffer>>(dma);
+        auto* allocator = gst_dmabuf_allocator_new();
+        auto* memory = gst_dmabuf_allocator_alloc_with_flags(allocator, dma->fd, dma->size,
+                                                             GST_FD_MEMORY_FLAG_DONT_CLOSE);
         gst_object_unref(allocator);
-        if(!memory)throw std::runtime_error("cannot wrap encoder DMA buffer");
+        if (!memory)
+            throw std::runtime_error("cannot wrap encoder DMA buffer");
         // 在 GstMemory 而非 GstBuffer 上保活，缓冲区浅复制后仍不能归还解码/OSD 池。
-        gst_mini_object_set_qdata(GST_MINI_OBJECT(memory),g_quark_from_static_string("rkmon-dma-owner"),retained.release(),
-            [](gpointer ptr){delete static_cast<std::shared_ptr<const media::DmaBuffer>*>(ptr);});
-        gst_buffer_append_memory(buffer,memory);
-        gsize offsets[GST_VIDEO_MAX_PLANES]={0,uv_offset};
-        gint strides[GST_VIDEO_MAX_PLANES]={static_cast<gint>(stride),static_cast<gint>(stride)};
-        if(!gst_buffer_add_video_meta_full(buffer,GST_VIDEO_FRAME_FLAG_NONE,GST_VIDEO_FORMAT_NV12,
-                                           width,height,2,offsets,strides)) {
+        gst_mini_object_set_qdata(
+            GST_MINI_OBJECT(memory), g_quark_from_static_string("rkmon-dma-owner"),
+            retained.release(), [](gpointer ptr) {
+                delete static_cast<std::shared_ptr<const media::DmaBuffer>*>(ptr);
+            });
+        gst_buffer_append_memory(buffer, memory);
+        gsize offsets[GST_VIDEO_MAX_PLANES] = {0, uv_offset};
+        gint strides[GST_VIDEO_MAX_PLANES] = {static_cast<gint>(stride), static_cast<gint>(stride)};
+        if (!gst_buffer_add_video_meta_full(buffer, GST_VIDEO_FRAME_FLAG_NONE,
+                                            GST_VIDEO_FORMAT_NV12, width, height, 2, offsets,
+                                            strides)) {
             throw std::runtime_error("cannot attach encoder DMA video metadata");
         }
     } else
 #endif
     {
         std::unique_ptr<media::DmaMapping> cpu_input;
-        if(frame.dma)cpu_input=std::make_unique<media::DmaMapping>(frame.dma);
-        const auto* source_data=cpu_input?cpu_input->data():frame.data.get();
-        buffer=gst_buffer_new_allocate(nullptr,s.info.size,nullptr);
-        if(!buffer)throw std::bad_alloc();
+        if (frame.dma)
+            cpu_input = std::make_unique<media::DmaMapping>(frame.dma);
+        const auto* source_data = cpu_input ? cpu_input->data() : frame.data.get();
+        buffer = gst_buffer_new_allocate(nullptr, s.info.size, nullptr);
+        if (!buffer)
+            throw std::bad_alloc();
         guard.reset(buffer);
         GstMapInfo mapping{};
-        if(!gst_buffer_map(buffer,&mapping,GST_MAP_WRITE))
+        if (!gst_buffer_map(buffer, &mapping, GST_MAP_WRITE))
             throw std::runtime_error("cannot map encoder input");
         // 不支持 RGA 的构建仍提供 CPU 拷贝路径。
         std::memset(mapping.data, 0, mapping.size);
@@ -221,15 +251,23 @@ void GstRtspPublisher::write(const camera::VideoFrame& frame) {
         }
         gst_buffer_unmap(buffer, &mapping);
     }
-    GST_BUFFER_PTS(buffer) = std::chrono::duration_cast<std::chrono::nanoseconds>(frame.timestamp - s.origin).count();
+    GST_BUFFER_PTS(buffer) =
+        std::chrono::duration_cast<std::chrono::nanoseconds>(frame.timestamp - s.origin).count();
     GST_BUFFER_DURATION(buffer) = GST_SECOND / s.config.fps;
     // appsrc 接管引用；没有阻塞 push，停止请求不必等待网络发送。
     if (gst_app_src_push_buffer(GST_APP_SRC(s.source), guard.release()) != GST_FLOW_OK && !s.stop) {
         throw std::runtime_error("encoder input rejected");
     }
 }
-void GstRtspPublisher::request_stop() noexcept { impl_->stop = true; }
-std::uint64_t GstRtspPublisher::encoded_frames() const noexcept { return impl_->encoded.load(); }
+
+void GstRtspPublisher::request_stop() noexcept {
+    impl_->stop = true;
+}
+
+std::uint64_t GstRtspPublisher::encoded_frames() const noexcept {
+    return impl_->encoded.load();
+}
+
 void GstRtspPublisher::close() noexcept {
     auto& s = *impl_;
     // 工作线程已退出；NULL 状态结束流线程后再销毁含 pad probe 的管线。
@@ -238,9 +276,12 @@ void GstRtspPublisher::close() noexcept {
         // 等硬件编码线程完全退出后再释放对象，避免紧接着 open 时占用旧 MPP 上下文。
         gst_element_get_state(s.pipeline, nullptr, nullptr, 2 * GST_SECOND);
     }
-    if (s.bus) gst_object_unref(s.bus);
-    if (s.source) gst_object_unref(s.source);
-    if (s.pipeline) gst_object_unref(s.pipeline);
+    if (s.bus)
+        gst_object_unref(s.bus);
+    if (s.source)
+        gst_object_unref(s.source);
+    if (s.pipeline)
+        gst_object_unref(s.pipeline);
     s.bus = nullptr;
     s.source = s.pipeline = nullptr;
     s.osd_pool.clear();

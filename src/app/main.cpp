@@ -20,18 +20,31 @@ public:
         sigaddset(&signals_, SIGINT);
         sigaddset(&signals_, SIGTERM);
         const int error = pthread_sigmask(SIG_BLOCK, &signals_, &previous_);
-        if (error) throw std::system_error(error, std::generic_category(), "pthread_sigmask");
-        try { worker_ = std::thread([this] { wait(); }); }
-        catch (...) { pthread_sigmask(SIG_SETMASK, &previous_, nullptr); throw; }
+        if (error)
+            throw std::system_error(error, std::generic_category(), "pthread_sigmask");
+        try {
+            worker_ = std::thread([this] {
+                wait();
+            });
+        } catch (...) {
+            pthread_sigmask(SIG_SETMASK, &previous_, nullptr);
+            throw;
+        }
     }
+
     ~SignalWaiter() {
         stopped_ = true;
         worker_.join();
         pthread_sigmask(SIG_SETMASK, &previous_, nullptr);
     }
+
     SignalWaiter(const SignalWaiter&) = delete;
     SignalWaiter& operator=(const SignalWaiter&) = delete;
-    bool failed() const noexcept { return failed_; }
+
+    bool failed() const noexcept {
+        return failed_;
+    }
+
 private:
     void wait() noexcept {
         while (!stopped_) {
@@ -47,6 +60,7 @@ private:
             }
         }
     }
+
     rkmon::app::Application& application_;
     sigset_t signals_{}, previous_{};
     std::atomic<bool> stopped_{false}, failed_{false};
@@ -70,7 +84,8 @@ int main(int argc, char** argv) {
             configured = true;
         }
         auto config = rkmon::app::load_config(path);
-        rkmon::app::Application application(config.application, rkmon::app::make_service_factory(config));
+        rkmon::app::Application application(config.application,
+                                            rkmon::app::make_service_factory(config));
         // 信号屏蔽须发生在 Application 创建任何模块线程之前。
         SignalWaiter signals(application);
         const int result = application.run();

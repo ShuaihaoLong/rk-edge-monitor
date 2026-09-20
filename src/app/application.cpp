@@ -17,7 +17,7 @@ namespace rkmon::app {
 
 Application::ServiceFactory make_service_factory(RuntimeConfig config) {
     return [config = std::move(config)](Application::FaultReporter report,
-                                       std::shared_ptr<spdlog::logger> logger) {
+                                        std::shared_ptr<spdlog::logger> logger) {
         Application::ServiceList services;
         std::unique_ptr<camera::VideoCaptureService> capture;
         camera::VideoCaptureService* capture_view = nullptr;
@@ -29,24 +29,38 @@ Application::ServiceFactory make_service_factory(RuntimeConfig config) {
         // 状态服务最先启动、最后停止，即使摄像头缺失也能持续发布设备在线状态。
         if (config.mqtt) {
             services.push_back(std::make_unique<mqtt::DeviceStatusService>(
-                *config.mqtt, [capture_view] { return capture_view && capture_view->online(); }, logger));
+                *config.mqtt,
+                [capture_view] {
+                    return capture_view && capture_view->online();
+                },
+                logger));
         }
         if (config.stm32) {
-            if (!config.mqtt) throw std::invalid_argument("STM32 service requires MQTT");
-            services.push_back(std::make_unique<stm32::Stm32Service>(*config.stm32, *config.mqtt, logger));
+            if (!config.mqtt)
+                throw std::invalid_argument("STM32 service requires MQTT");
+            services.push_back(
+                std::make_unique<stm32::Stm32Service>(*config.stm32, *config.mqtt, logger));
         }
         if (capture) {
             services.push_back(std::move(capture));
             if (config.video) {
                 // 上游先启动；provider 在解码 start 时才读取当次采集队列。
                 // ServiceManager 逆序停止/等待，借用的采集服务覆盖解码服务的运行期。
-                auto ai_queue = config.ai ? std::make_shared<ai::InferenceService::Queue>(1) : nullptr;
+                auto ai_queue =
+                    config.ai ? std::make_shared<ai::InferenceService::Queue>(1) : nullptr;
                 auto decode = std::make_unique<video::VideoProcessService>(
                     video::make_hardware_decoder(*config.video),
-                    [capture_view] { return capture_view->output(); }, *config.video,
-                    [report](const std::string& reason) { report("video_decode", reason); }, logger,
+                    [capture_view] {
+                        return capture_view->output();
+                    },
+                    *config.video,
+                    [report](const std::string& reason) {
+                        report("video_decode", reason);
+                    },
+                    logger,
                     [ai_queue](const camera::VideoFrame& frame) {
-                        if (ai_queue) ai_queue->try_push(frame, core::OverflowPolicy::drop_oldest);
+                        if (ai_queue)
+                            ai_queue->try_push(frame, core::OverflowPolicy::drop_oldest);
                     });
                 auto* decode_view = decode.get();
                 services.push_back(std::move(decode));
@@ -60,8 +74,13 @@ Application::ServiceFactory make_service_factory(RuntimeConfig config) {
                 if (config.stream) {
                     services.push_back(std::make_unique<video::VideoStreamService>(
                         video::make_hardware_publisher(*config.stream),
-                        [decode_view] { return decode_view->output(); },
-                        [report](const std::string& reason) { report("video_stream", reason); }, logger));
+                        [decode_view] {
+                            return decode_view->output();
+                        },
+                        [report](const std::string& reason) {
+                            report("video_stream", reason);
+                        },
+                        logger));
                 }
             }
         }
@@ -72,12 +91,13 @@ Application::ServiceFactory make_service_factory(RuntimeConfig config) {
 Application::Application() : Application(Options{}) {}
 
 Application::Application(Options options, ServiceFactory factory)
-    : options_(std::move(options)),
-      factory_(std::move(factory)),
+    : options_(std::move(options)), factory_(std::move(factory)),
       control_mailbox_(options_.control_mailbox_capacity),
       services_(std::make_unique<core::ServiceManager>()) {}
 
-Application::~Application() { shutdown(); }
+Application::~Application() {
+    shutdown();
+}
 
 int Application::run() {
     if (run_called_) {
@@ -117,24 +137,31 @@ int Application::run() {
 }
 
 bool Application::request_stop() {
-    if (control_mailbox_.closed()) return false;
+    if (control_mailbox_.closed())
+        return false;
     control_mailbox_.close(core::CloseMode::discard);
     return true;
 }
 
 void Application::setup_services() {
-    if (!factory_) return;
-    auto services = factory_([this](std::string service, std::string reason) {
-        // 致命故障的退出不依赖日志成功或邮箱剩余容量。
-        service_failed_ = true;
-        try {
-            if (control_mailbox_.try_post(ServiceFault{service, reason}) == core::PushResult::accepted)
-                return;
-            logger_->error("[{}] {}", service, reason);
-        } catch (...) {}
-        request_stop();
-    }, logger_);
-    for (auto& service : services) services_->add(std::move(service));
+    if (!factory_)
+        return;
+    auto services = factory_(
+        [this](std::string service, std::string reason) {
+            // 致命故障的退出不依赖日志成功或邮箱剩余容量。
+            service_failed_ = true;
+            try {
+                if (control_mailbox_.try_post(ServiceFault{service, reason}) ==
+                    core::PushResult::accepted)
+                    return;
+                logger_->error("[{}] {}", service, reason);
+            } catch (...) {
+            }
+            request_stop();
+        },
+        logger_);
+    for (auto& service : services)
+        services_->add(std::move(service));
 }
 
 void Application::process_control_events() {

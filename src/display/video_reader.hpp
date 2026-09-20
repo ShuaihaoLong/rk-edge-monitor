@@ -6,12 +6,14 @@
 #include <string>
 #include <thread>
 #include <vector>
+
 namespace rkmon::display {
 struct VideoImage {
     std::vector<std::uint8_t> pixels;
     std::uint64_t sequence{};
     std::chrono::steady_clock::time_point received;
 };
+
 // 工作线程持有 GStreamer 对象；交接时复制一帧 RGB，不让 UI 持有硬解缓冲区。
 class VideoReader {
 public:
@@ -20,6 +22,7 @@ public:
     void set_enabled(bool enabled);
     bool take(VideoImage& frame);
     std::string status() const;
+
 private:
     void run() noexcept;
     std::string url_;

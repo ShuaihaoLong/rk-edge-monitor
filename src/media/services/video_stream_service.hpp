@@ -21,8 +21,13 @@ public:
     void request_stop() noexcept override;
     void join() noexcept override;
     bool running() const noexcept override;
-    std::string_view name() const noexcept override { return "video_stream"; }
+
+    std::string_view name() const noexcept override {
+        return "video_stream";
+    }
+
     core::HealthSnapshot health() const override;
+
 private:
     void run() noexcept;
     void fail(std::string reason) noexcept;

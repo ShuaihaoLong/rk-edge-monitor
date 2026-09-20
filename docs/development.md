@@ -6,6 +6,8 @@
 
 源码保持 C++17；线程使用 `std::thread`、显式停止和 `join`。主机构建不链接 ARM 专用库，ARM64 构建默认开启硬件后端。
 
+`src/` 的 C++ 排版由 `src/.clang-format` 统一，使用 clang-format 18：4 空格缩进、100 列换行，展开单行控制流和非空函数，保留 include 顺序。修改后可用 `clang-format -i 路径` 整理对应源码。Python 使用 Black 24，参数为 `--line-length 100 --skip-string-normalization`。格式整理不改变业务逻辑、锁作用域或资源释放顺序。
+
 ## 常用命令
 
 ```bash

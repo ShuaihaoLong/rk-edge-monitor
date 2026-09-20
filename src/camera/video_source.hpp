@@ -13,10 +13,10 @@ struct CaptureConfig {
     int height{1080};
     PixelFormat format{PixelFormat::MJPG};
     unsigned fps{30};
-    unsigned buffer_count{4};              // 请求的驱动缓冲区数量，与业务队列容量独立。
-    int poll_timeout_ms{1000};             // 单次 read 的等待时限。
-    unsigned max_consecutive_timeouts{5};  // 由采集服务执行的连续超时故障阈值。
-    unsigned reconnect_interval_ms{2000};  // 设备缺失或断开后的重新打开间隔。
+    unsigned buffer_count{4};  // 请求的驱动缓冲区数量，与业务队列容量独立。
+    int poll_timeout_ms{1000}; // 单次 read 的等待时限。
+    unsigned max_consecutive_timeouts{5}; // 由采集服务执行的连续超时故障阈值。
+    unsigned reconnect_interval_ms{2000}; // 设备缺失或断开后的重新打开间隔。
 };
 
 // 帧间隔单位为秒，分子/分母为 0 时不能据此计算帧率。

@@ -105,8 +105,6 @@ git submodule update --init --recursive
 cd /home/lsh/rk-edge-monitor
 ```
 
-不要把真实密码、密钥或板端私有配置提交到仓库。板卡地址、运行用户和设备路径应按实际环境修改。
-
 ## 3. 构建和测试
 
 ### 主机构建与 CTest

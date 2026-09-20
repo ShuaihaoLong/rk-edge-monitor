@@ -19,6 +19,7 @@ public:
     ReadResult read() override;
     void request_stop() noexcept override;
     void close() noexcept override;
+
     NegotiatedFormat negotiated_format() const override {
         return actual_;
     }

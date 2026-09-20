@@ -32,15 +32,20 @@ public:
     void request_stop() noexcept override;
     void join() noexcept override;
     bool running() const noexcept override;
+
     std::string_view name() const noexcept override {
         return "video_decode";
     }
+
     core::HealthSnapshot health() const override;
+
     // 控制线程在 start 成功后获取，停止后帧内存仍可独立持有。
     std::shared_ptr<Queue> output() const {
         return output_;
     }
+
     ProcessStats stats() const;
+
 private:
     void run() noexcept;
     void fail(std::string reason) noexcept;

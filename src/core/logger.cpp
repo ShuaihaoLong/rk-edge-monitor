@@ -14,13 +14,15 @@ std::shared_ptr<spdlog::logger> logger;
 
 void init(const Options& options) {
     std::lock_guard lock(logger_mutex);
-    if (logger) throw std::logic_error("rkmon logger already initialized");
+    if (logger)
+        throw std::logic_error("rkmon logger already initialized");
     if (!options.console && options.file_path.empty())
         throw std::invalid_argument("logger requires at least one sink");
     if (!options.file_path.empty() && options.max_file_size == 0)
         throw std::invalid_argument("log file size must be positive");
     std::vector<spdlog::sink_ptr> sinks;
-    if (options.console) sinks.push_back(std::make_shared<spdlog::sinks::stdout_color_sink_mt>());
+    if (options.console)
+        sinks.push_back(std::make_shared<spdlog::sinks::stdout_color_sink_mt>());
     if (!options.file_path.empty()) {
         sinks.push_back(std::make_shared<spdlog::sinks::rotating_file_sink_mt>(
             options.file_path, options.max_file_size, options.rotated_files));
@@ -34,7 +36,8 @@ void init(const Options& options) {
 
 std::shared_ptr<spdlog::logger> get() {
     std::lock_guard lock(logger_mutex);
-    if (!logger) throw std::logic_error("rkmon logger is not initialized");
+    if (!logger)
+        throw std::logic_error("rkmon logger is not initialized");
     return logger;
 }
 
@@ -45,7 +48,11 @@ void shutdown() noexcept {
         previous = std::move(logger);
     }
     // 不持锁执行输出，不调用 spdlog 全局 shutdown，以免影响第三方自己的 logger。
-    try { if (previous) previous->flush(); }
-    catch (...) { std::fputs("rkmon: log flush failed during shutdown\n", stderr); }
+    try {
+        if (previous)
+            previous->flush();
+    } catch (...) {
+        std::fputs("rkmon: log flush failed during shutdown\n", stderr);
+    }
 }
 } // namespace rkmon::log

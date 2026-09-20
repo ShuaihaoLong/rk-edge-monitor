@@ -15,7 +15,11 @@ namespace {
 // DMA 输出帧持有 GstBuffer 引用，最后一个消费者释放后才归还解码池。
 struct Sample {
     GstSample* value;
-    ~Sample() { if (value) gst_sample_unref(value); }
+
+    ~Sample() {
+        if (value)
+            gst_sample_unref(value);
+    }
 };
 
 }
@@ -31,7 +35,8 @@ struct GstVideoPipeline::Impl {
     std::chrono::steady_clock::time_point origin{};
 
     void check_bus() {
-        auto* message = gst_bus_pop_filtered(bus, static_cast<GstMessageType>(GST_MESSAGE_ERROR | GST_MESSAGE_EOS));
+        auto* message = gst_bus_pop_filtered(
+            bus, static_cast<GstMessageType>(GST_MESSAGE_ERROR | GST_MESSAGE_EOS));
         if (!message) {
             return;
         }
@@ -59,7 +64,9 @@ GstVideoPipeline::GstVideoPipeline(DecodeConfig config) : impl_(std::make_unique
     impl_->config = config;
 }
 
-GstVideoPipeline::~GstVideoPipeline() { close(); }
+GstVideoPipeline::~GstVideoPipeline() {
+    close();
+}
 
 void GstVideoPipeline::open() {
     auto& s = *impl_;
@@ -81,7 +88,8 @@ void GstVideoPipeline::open() {
             "appsrc name=input is-live=true format=time block=false max-buffers=1 max-bytes=0 "
             "! jpegparse ! mppjpegdec format=NV12 dma-feature=true "
             "! video/x-raw(ANY),format=NV12 "
-            "! appsink name=output sync=false max-buffers=1 drop=false wait-on-eos=false", &error);
+            "! appsink name=output sync=false max-buffers=1 drop=false wait-on-eos=false",
+            &error);
         if (error || !s.pipeline) {
             const std::string reason = error ? error->message : "cannot create decoder pipeline";
             g_clear_error(&error);
@@ -118,8 +126,8 @@ std::optional<camera::VideoFrame> GstVideoPipeline::decode(const camera::VideoFr
         s.width = input.width;
         s.height = input.height;
         s.origin = input.timestamp;
-        auto* caps = gst_caps_new_simple("image/jpeg", "width", G_TYPE_INT, s.width,
-                                        "height", G_TYPE_INT, s.height, nullptr);
+        auto* caps = gst_caps_new_simple("image/jpeg", "width", G_TYPE_INT, s.width, "height",
+                                         G_TYPE_INT, s.height, nullptr);
         gst_app_src_set_caps(GST_APP_SRC(s.source), caps);
         gst_caps_unref(caps);
     }
@@ -131,13 +139,15 @@ std::optional<camera::VideoFrame> GstVideoPipeline::decode(const camera::VideoFr
         throw std::bad_alloc();
     }
     gst_buffer_fill(buffer, 0, input.data.get(), input.size);
-    GST_BUFFER_PTS(buffer) = std::chrono::duration_cast<std::chrono::nanoseconds>(input.timestamp - s.origin).count();
+    GST_BUFFER_PTS(buffer) =
+        std::chrono::duration_cast<std::chrono::nanoseconds>(input.timestamp - s.origin).count();
     // push_buffer 接管引用；后续错误不能再次释放 buffer。
     if (gst_app_src_push_buffer(GST_APP_SRC(s.source), buffer) != GST_FLOW_OK) {
         s.check_bus();
         throw std::runtime_error("appsrc rejected JPEG frame");
     }
-    const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(s.config.timeout_ms);
+    const auto deadline =
+        std::chrono::steady_clock::now() + std::chrono::milliseconds(s.config.timeout_ms);
     while (!s.stop) {
         Sample sample{gst_app_sink_try_pull_sample(GST_APP_SINK(s.sink), 20 * GST_MSECOND)};
         s.check_bus();
@@ -145,27 +155,34 @@ std::optional<camera::VideoFrame> GstVideoPipeline::decode(const camera::VideoFr
             GstVideoInfo info{};
             if (!gst_video_info_from_caps(&info, gst_sample_get_caps(sample.value)) ||
                 GST_VIDEO_INFO_FORMAT(&info) != GST_VIDEO_FORMAT_NV12 ||
-                GST_VIDEO_INFO_WIDTH(&info) != s.width || GST_VIDEO_INFO_HEIGHT(&info) != s.height) {
+                GST_VIDEO_INFO_WIDTH(&info) != s.width ||
+                GST_VIDEO_INFO_HEIGHT(&info) != s.height) {
                 throw std::runtime_error("decoder output is not the requested NV12 image");
             }
-            auto* decoded=gst_sample_get_buffer(sample.value);
-            auto* meta=gst_buffer_get_video_meta(decoded);
-            if(gst_buffer_n_memory(decoded)!=1 || !meta || meta->n_planes!=2)
-                throw std::runtime_error("decoder requires single DMA buffer and NV12 video metadata");
-            auto* memory=gst_buffer_peek_memory(decoded,0);
-            gsize offset=0,maxsize=0;
-            const auto bytes=gst_memory_get_sizes(memory,&offset,&maxsize);
-            if(!gst_is_dmabuf_memory(memory) || offset!=0 || meta->offset[0]!=0 ||
-               meta->stride[0]<=0 || meta->stride[0]!=meta->stride[1] ||
-               meta->offset[1]%static_cast<std::size_t>(meta->stride[0]))
+            auto* decoded = gst_sample_get_buffer(sample.value);
+            auto* meta = gst_buffer_get_video_meta(decoded);
+            if (gst_buffer_n_memory(decoded) != 1 || !meta || meta->n_planes != 2)
+                throw std::runtime_error(
+                    "decoder requires single DMA buffer and NV12 video metadata");
+            auto* memory = gst_buffer_peek_memory(decoded, 0);
+            gsize offset = 0, maxsize = 0;
+            const auto bytes = gst_memory_get_sizes(memory, &offset, &maxsize);
+            if (!gst_is_dmabuf_memory(memory) || offset != 0 || meta->offset[0] != 0 ||
+                meta->stride[0] <= 0 || meta->stride[0] != meta->stride[1] ||
+                meta->offset[1] % static_cast<std::size_t>(meta->stride[0]))
                 throw std::runtime_error("unsupported decoder DMA layout");
-            std::shared_ptr<void> owner(gst_buffer_ref(decoded),[](void* ptr){gst_buffer_unref(static_cast<GstBuffer*>(ptr));});
-            camera::VideoFrame result=input;
-            result.format=camera::PixelFormat::NV12;
-            result.stride=meta->stride[0];result.uv_offset=meta->offset[1];
-            result.height_stride=result.uv_offset/result.stride;
-            result.data.reset();result.size=bytes;
-            result.dma=std::make_shared<media::DmaBuffer>(media::DmaBuffer{gst_dmabuf_memory_get_fd(memory),bytes,std::move(owner)});
+            std::shared_ptr<void> owner(gst_buffer_ref(decoded), [](void* ptr) {
+                gst_buffer_unref(static_cast<GstBuffer*>(ptr));
+            });
+            camera::VideoFrame result = input;
+            result.format = camera::PixelFormat::NV12;
+            result.stride = meta->stride[0];
+            result.uv_offset = meta->offset[1];
+            result.height_stride = result.uv_offset / result.stride;
+            result.data.reset();
+            result.size = bytes;
+            result.dma = std::make_shared<media::DmaBuffer>(
+                media::DmaBuffer{gst_dmabuf_memory_get_fd(memory), bytes, std::move(owner)});
             media::validate_nv12(result);
             return result;
         }
@@ -177,7 +194,10 @@ std::optional<camera::VideoFrame> GstVideoPipeline::decode(const camera::VideoFr
     return std::nullopt;
 }
 
-void GstVideoPipeline::request_stop() noexcept { impl_->stop = true; }
+void GstVideoPipeline::request_stop() noexcept {
+    impl_->stop = true;
+}
+
 void GstVideoPipeline::close() noexcept {
     auto& s = *impl_;
     if (s.pipeline) {

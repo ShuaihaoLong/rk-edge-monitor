@@ -18,6 +18,7 @@ struct Dht11Sample {
     std::uint8_t temp_int{}, temp_dec{}, humi_int{}, humi_dec{};
     std::int64_t received_at_ms{};
 };
+
 std::optional<Dht11Sample> decode_dht11(const Frame& frame, std::int64_t received_at_ms);
 std::string telemetry_json(const Dht11Sample& sample);
 
@@ -28,9 +29,17 @@ public:
     bool start() override;
     void request_stop() noexcept override;
     void join() noexcept override;
-    bool running() const noexcept override { return running_.load(); }
-    std::string_view name() const noexcept override { return "stm32"; }
+
+    bool running() const noexcept override {
+        return running_.load();
+    }
+
+    std::string_view name() const noexcept override {
+        return "stm32";
+    }
+
     core::HealthSnapshot health() const override;
+
 private:
     void serial_loop() noexcept;
     void mqtt_loop() noexcept;
@@ -55,7 +64,12 @@ private:
     std::uint64_t sample_generation_{0};
     std::uint32_t next_sequence_{0};
     std::deque<Frame> commands_;
-    struct Event { std::uint64_t id; std::string topic, payload; };
+
+    struct Event {
+        std::uint64_t id;
+        std::string topic, payload;
+    };
+
     std::deque<Event> events_;
     std::uint64_t next_event_{0};
 };

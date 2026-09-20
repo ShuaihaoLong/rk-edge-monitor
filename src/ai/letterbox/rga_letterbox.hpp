@@ -14,6 +14,7 @@ public:
     RgaLetterbox(const RgaLetterbox&) = delete;
     RgaLetterbox& operator=(const RgaLetterbox&) = delete;
     const ModelImage& process(const camera::VideoFrame& frame);
+
 private:
     struct Impl;
     std::unique_ptr<Impl> impl_;

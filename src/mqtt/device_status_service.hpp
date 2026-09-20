@@ -20,9 +20,17 @@ public:
     bool start() override;
     void request_stop() noexcept override;
     void join() noexcept override;
-    bool running() const noexcept override { return running_.load(); }
-    std::string_view name() const noexcept override { return "mqtt_status"; }
+
+    bool running() const noexcept override {
+        return running_.load();
+    }
+
+    std::string_view name() const noexcept override {
+        return "mqtt_status";
+    }
+
     core::HealthSnapshot health() const override;
+
 private:
     void run() noexcept;
     std::string status_json(bool online);

@@ -39,20 +39,25 @@ public:
     void request_stop() noexcept override;
     void join() noexcept override;
     bool running() const noexcept override;
+
     std::string_view name() const noexcept override {
         return "video_capture";
     }
+
     core::HealthSnapshot health() const override;
 
     // 控制线程在 start 成功后获取；每次重启创建新队列，旧句柄保持关闭状态。
     std::shared_ptr<Queue> output() const {
         return queue_;
     }
+
     CaptureStats stats() const;
+
     // true 仅表示设备当前已打开且最近一次读取未发生致命错误。
     [[nodiscard]] bool online() const noexcept {
         return online_.load();
     }
+
     NegotiatedFormat negotiated_format() const {
         return source_->negotiated_format();
     }

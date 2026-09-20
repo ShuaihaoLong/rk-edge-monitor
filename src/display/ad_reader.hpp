@@ -13,6 +13,7 @@ public:
     ~AdReader();
     bool take(VideoImage& frame);
     bool advertising() const;
+
 private:
     void run() noexcept;
     std::vector<std::string> playlist() const;

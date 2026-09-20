@@ -3,9 +3,10 @@
 #include <utility>
 
 namespace rkmon::video {
-VideoProcessService::VideoProcessService(std::unique_ptr<IVideoDecoder> decoder, InputProvider input,
-                                       DecodeConfig config, FaultHandler fault,
-                                       std::shared_ptr<spdlog::logger> logger, FrameSink sink)
+VideoProcessService::VideoProcessService(std::unique_ptr<IVideoDecoder> decoder,
+                                         InputProvider input, DecodeConfig config,
+                                         FaultHandler fault, std::shared_ptr<spdlog::logger> logger,
+                                         FrameSink sink)
     : decoder_(std::move(decoder)), provider_(std::move(input)), config_(config),
       fault_(std::move(fault)), sink_(std::move(sink)), logger_(std::move(logger)) {
     if (!decoder_ || !provider_ || config_.queue_capacity == 0) {
@@ -129,13 +130,15 @@ void VideoProcessService::run() noexcept {
                 if (generation != 0 && input->source_generation != generation) {
                     // JPEG 解析器和硬件解码器保存流状态，新 USB 会话必须整体重建。
                     decoder_->close();
-                    if (stop_) break;
+                    if (stop_)
+                        break;
                     decoder_->open();
                     if (stop_) {
                         decoder_->request_stop();
                         break;
                     }
-                    if (logger_) logger_->info("[video_decode] camera session changed; decoder restarted");
+                    if (logger_)
+                        logger_->info("[video_decode] camera session changed; decoder restarted");
                 }
                 generation = input->source_generation;
                 auto frame = decoder_->decode(*input);
@@ -146,28 +149,35 @@ void VideoProcessService::run() noexcept {
                     throw std::runtime_error("decoder stopped unexpectedly");
                 }
                 if (frames_ == 0 && logger_) {
-                    logger_->info("[video_decode] first NV12 frame: {}x{}, stride={}, bytes={}, dma={}",
-                                  frame->width, frame->height, frame->stride, frame->size, bool(frame->dma));
+                    logger_->info(
+                        "[video_decode] first NV12 frame: {}x{}, stride={}, bytes={}, dma={}",
+                        frame->width, frame->height, frame->stride, frame->size, bool(frame->dma));
                 }
                 ++frames_;
                 // 分发只读帧引用；订阅回调必须非阻塞，下游各自维护有界队列。
-                if (sink_) sink_(*frame);
+                if (sink_)
+                    sink_(*frame);
                 // 下游慢时丢旧的原始图像，既不占住硬件输出，也不让内存无限增长。
-                if (output_->try_push(std::move(*frame), core::OverflowPolicy::drop_oldest)
-                    == core::PushResult::closed) break;
+                if (output_->try_push(std::move(*frame), core::OverflowPolicy::drop_oldest) ==
+                    core::PushResult::closed)
+                    break;
             }
         } catch (const std::exception& error) {
-            if (stop_) break;
+            if (stop_)
+                break;
             {
                 std::lock_guard lock(mutex_);
                 error_ = error.what();
             }
             state_ = core::ServiceState::degraded;
             try {
-                if (logger_) logger_->warn("[video_decode] {}; retry in 2s", error.what());
-            } catch (...) {}
+                if (logger_)
+                    logger_->warn("[video_decode] {}; retry in 2s", error.what());
+            } catch (...) {
+            }
         } catch (...) {
-            if (stop_) break;
+            if (stop_)
+                break;
             {
                 std::lock_guard lock(mutex_);
                 error_ = "unknown video processing failure";
@@ -185,8 +195,10 @@ void VideoProcessService::run() noexcept {
     }
     try {
         if (logger_) {
-            logger_->info("[video_decode] frames={}, output_dropped={}", frames_.load(), output_->dropped());
+            logger_->info("[video_decode] frames={}, output_dropped={}", frames_.load(),
+                          output_->dropped());
         }
-    } catch (...) {}
+    } catch (...) {
+    }
 }
 } // namespace rkmon::video

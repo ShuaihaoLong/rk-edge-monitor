@@ -12,6 +12,7 @@ public:
     void request_stop() noexcept override;
     void close() noexcept override;
     std::uint64_t encoded_frames() const noexcept override;
+
 private:
     struct Impl;
     std::unique_ptr<Impl> impl_;

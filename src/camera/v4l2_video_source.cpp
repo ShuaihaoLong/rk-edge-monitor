@@ -49,8 +49,8 @@ std::uint32_t fourcc(PixelFormat format) {
 }
 
 PixelFormat pixel_format(std::uint32_t value) {
-    for (auto f : {PixelFormat::MJPG, PixelFormat::YUYV, PixelFormat::NV12,
-                   PixelFormat::RGB888, PixelFormat::BGR888}) {
+    for (auto f : {PixelFormat::MJPG, PixelFormat::YUYV, PixelFormat::NV12, PixelFormat::RGB888,
+                   PixelFormat::BGR888}) {
         if (fourcc(f) == value) {
             return f;
         }
@@ -61,9 +61,8 @@ PixelFormat pixel_format(std::uint32_t value) {
 } // namespace
 
 V4L2VideoSource::V4L2VideoSource(CaptureConfig config) : config_(std::move(config)) {
-    if (config_.device.empty() || config_.width <= 0 || config_.height <= 0 ||
-        config_.fps == 0 || config_.buffer_count < 2 || config_.buffer_count > 64 ||
-        config_.poll_timeout_ms <= 0) {
+    if (config_.device.empty() || config_.width <= 0 || config_.height <= 0 || config_.fps == 0 ||
+        config_.buffer_count < 2 || config_.buffer_count > 64 || config_.poll_timeout_ms <= 0) {
         throw std::invalid_argument("invalid capture configuration");
     }
     wake_fd_ = ::eventfd(0, EFD_NONBLOCK | EFD_CLOEXEC);
@@ -85,7 +84,8 @@ void V4L2VideoSource::open() {
     }
     // 清除上次停止留下的唤醒计数，允许关闭后重新打开。
     std::uint64_t pending;
-    while (::read(wake_fd_, &pending, sizeof(pending)) > 0) {}
+    while (::read(wake_fd_, &pending, sizeof(pending)) > 0) {
+    }
     stop_ = false;
     actual_ = {};
     try {
@@ -110,8 +110,8 @@ void V4L2VideoSource::open() {
 void V4L2VideoSource::query_capabilities() {
     v4l2_capability capability{};
     checked_ioctl(fd_, VIDIOC_QUERYCAP, &capability, "VIDIOC_QUERYCAP");
-    const auto caps = (capability.capabilities & V4L2_CAP_DEVICE_CAPS)
-        ? capability.device_caps : capability.capabilities;
+    const auto caps = (capability.capabilities & V4L2_CAP_DEVICE_CAPS) ? capability.device_caps
+                                                                       : capability.capabilities;
     if (!(caps & V4L2_CAP_VIDEO_CAPTURE) || !(caps & V4L2_CAP_STREAMING)) {
         throw std::runtime_error("device is not a single-planar streaming capture node");
     }
@@ -162,8 +162,8 @@ void V4L2VideoSource::allocate_buffers() {
         buffer.memory = buffers.memory;
         buffer.index = i;
         checked_ioctl(fd_, VIDIOC_QUERYBUF, &buffer, "VIDIOC_QUERYBUF");
-        void* address = ::mmap(nullptr, buffer.length, PROT_READ | PROT_WRITE,
-                               MAP_SHARED, fd_, buffer.m.offset);
+        void* address = ::mmap(nullptr, buffer.length, PROT_READ | PROT_WRITE, MAP_SHARED, fd_,
+                               buffer.m.offset);
         if (address == MAP_FAILED) {
             throw std::system_error(errno, std::generic_category(), "mmap");
         }
@@ -182,14 +182,15 @@ ReadResult V4L2VideoSource::read() {
     }
     try {
         // 重试共用一个截止时间，信号中断和坏帧不会延长本次读取超时。
-        const auto deadline = std::chrono::steady_clock::now() +
-            std::chrono::milliseconds(config_.poll_timeout_ms);
+        const auto deadline =
+            std::chrono::steady_clock::now() + std::chrono::milliseconds(config_.poll_timeout_ms);
         for (;;) {
             if (stop_) {
                 return {ReadStatus::stopped, {}, {}};
             }
             const auto remaining = std::chrono::duration_cast<std::chrono::milliseconds>(
-                deadline - std::chrono::steady_clock::now()).count();
+                                       deadline - std::chrono::steady_clock::now())
+                                       .count();
             if (remaining <= 0) {
                 return {ReadStatus::timeout, {}, {}};
             }
