@@ -1,5 +1,6 @@
 #include <lvgl.h>
 #include "video_reader.hpp"
+#include "ad_reader.hpp"
 #include "telemetry.hpp"
 #include "app/config.hpp"
 #include <json-c/json.h>
@@ -132,6 +133,7 @@ int main(int argc, char** argv) {
         };
         const auto font_path = setting("font");
         const auto weather_path = setting("weather_cache");
+        const auto ads_path = setting("ads_root");
         const auto timezone = setting("timezone");
         if (timezone.empty() || timezone.front() == '/' || timezone.find("..") != std::string::npos ||
             !std::ifstream("/usr/share/zoneinfo/" + timezone)) throw std::runtime_error("invalid timezone");
@@ -181,7 +183,7 @@ int main(int argc, char** argv) {
         if (!font) throw std::runtime_error("cannot load CJK font");
         auto* compact_font = lv_freetype_font_create(font_path.c_str(), LV_FREETYPE_FONT_RENDER_MODE_BITMAP, 16, LV_FREETYPE_FONT_STYLE_NORMAL);
         if (!compact_font) throw std::runtime_error("cannot load compact CJK font");
-        label("本地监控", 24, 22, font);
+        label("RKMON", 24, 22, font);
         auto* clock = label("--:--:--", 790, 24, &lv_font_montserrat_32);
         auto* date = label("", 790, 72, font);
         auto* place = label("天气 · 合肥", 790, 125, font);
@@ -203,19 +205,29 @@ int main(int argc, char** argv) {
         dsc.data_size = pixels.size(); dsc.data = pixels.data();
         lv_image_set_src(img, &dsc);
         rkmon::display::VideoReader reader(runtime.stream->url);
+        rkmon::display::AdReader ad_reader(ads_path);
         std::unique_ptr<rkmon::display::Telemetry> telemetry;
         if (runtime.mqtt && runtime.stm32)
             telemetry = std::make_unique<rkmon::display::Telemetry>(*runtime.mqtt, runtime.stm32->stale_timeout_ms);
         rkmon::display::VideoImage video;
         const auto start = Clock::now();
         auto first = start, last = start, next_clock = start;
+        bool source_ad = false;
         unsigned frames = 0, stalls = 0;
         std::vector<double> render_ms, gaps_ms;
         while (!stopping && (!seconds || Clock::now() - start < std::chrono::seconds(seconds))) {
             SDL_Event e;
             while (SDL_PollEvent(&e))
                 if (e.type == SDL_QUIT || (e.type == SDL_KEYDOWN && e.key.keysym.sym == SDLK_ESCAPE)) stopping = 1;
-            if (reader.take(video)) {
+            const bool ad_mode = ad_reader.advertising();
+            if (ad_mode != source_ad) {
+                source_ad = ad_mode;
+                frames = 0;
+                stalls = 0;
+                first = last = Clock::now();
+            }
+            const bool has_video = ad_mode ? ad_reader.take(video) : reader.take(video);
+            if (has_video) {
                 const auto began = Clock::now();
                 pixels.swap(video.pixels);
                 dsc.data = pixels.data();
@@ -243,9 +255,12 @@ int main(int argc, char** argv) {
                 if (!video_online) {
                     lv_obj_add_flag(img, LV_OBJ_FLAG_HIDDEN);
                     lv_obj_remove_flag(offline, LV_OBJ_FLAG_HIDDEN);
-                    lv_label_set_text(offline, "视频离线 · 正在重连");
+                    lv_label_set_text(offline, source_ad ? "广告加载中" : "视频离线 · 正在重连");
                 }
-                lv_label_set_text(stats, video_online ? "实时画面  ·  本机视频流" : reader.status().c_str());
+                if (source_ad)
+                    lv_label_set_text(stats, video_online ? "广告播放  ·  本地视频" : "广告加载中");
+                else
+                    lv_label_set_text(stats, video_online ? "实时画面  ·  本机视频流" : reader.status().c_str());
                 if (telemetry) {
                     const auto sensor = telemetry->snapshot();
                     if (sensor.online) {

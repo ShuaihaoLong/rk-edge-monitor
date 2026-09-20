@@ -1,0 +1,28 @@
+:root { color-scheme: dark; font-family: system-ui, sans-serif; color: #dce5ee; background: #090e15; }
+* { box-sizing: border-box; }
+body { margin: 0; min-height: 100vh; }
+.ads-shell { width: min(920px, calc(100% - 32px)); margin: 0 auto; padding: 34px 0 60px; }
+.page-header, .list-header, #upload-form, .ad-item { display: flex; align-items: center; gap: 16px; }
+.page-header, .list-header { justify-content: space-between; }
+.page-header { margin-bottom: 28px; }
+.page-header h1 { margin: 0; font-size: 30px; letter-spacing: 0; }
+.page-header a { color: #87d3ed; }
+.eyebrow { margin: 0 0 8px; color: #74e5a6; font-size: 12px; text-transform: uppercase; }
+.hint, small { color: #8c9baa; }
+.upload-panel { padding: 18px; margin-bottom: 28px; border: 1px solid #26313e; border-radius: 10px; background: #111923; }
+#upload-form { flex-wrap: wrap; }
+#upload-form label { color: #94a7b8; }
+input[type=file] { min-width: 260px; color: #dce5ee; }
+button { border: 1px solid #415064; border-radius: 6px; padding: 8px 12px; color: #dce5ee; background: #172330; cursor: pointer; }
+button:hover:not(:disabled), button.active { border-color: #74e5a6; color: #07100b; background: #74e5a6; }
+button:disabled { opacity: .45; cursor: not-allowed; }
+#upload-status { color: #f5cc8a; font-size: 13px; }
+.list-header { margin-bottom: 12px; }
+.list-header h2 { margin: 0; font-size: 18px; }
+#ad-list { display: grid; gap: 10px; padding: 0; margin: 0; list-style: none; }
+.ad-item { justify-content: space-between; padding: 16px; border: 1px solid #2c3947; border-radius: 8px; background: #111923; }
+.ad-item.disabled { opacity: .55; }
+.ad-item strong, .ad-item small { display: block; overflow-wrap: anywhere; }
+.ad-item small { margin-top: 5px; }
+.ad-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 7px; flex-shrink: 0; }
+@media (max-width: 640px) { .ads-shell { width: min(100% - 24px, 920px); padding-top: 20px; } .page-header, .ad-item { align-items: flex-start; flex-direction: column; } .ad-actions { justify-content: flex-start; } input[type=file] { min-width: 0; max-width: 100%; } }

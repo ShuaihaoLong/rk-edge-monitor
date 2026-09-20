@@ -76,7 +76,7 @@ systemctl stop rkmon.service mediamtx.service rkmon-recording.service 2>/dev/nul
 install -d -m 755 /opt/rkmon/lib/recording /opt/rkmon/lib/display /opt/rkmon/bin /opt/rkmon/config /opt/rkmon/web /opt/rkmon/models /opt/rkmon/licenses /opt/rkmon/script
 install -d -m 755 -o elf -g "$(id -gn elf)" /opt/rkmon/logs
 # 录像目录独立于部署目录，不参与覆盖和程序备份。
-install -d -m 755 -o elf -g "$(id -gn elf)" /userdata/rkmon-video
+install -d -m 755 -o elf -g "$(id -gn elf)" /userdata/rkmon-video /userdata/rkmon-ads
 install -m 644 "$source_dir/lib/recording/"{service,notify}.py /opt/rkmon/lib/recording/
 install -m 755 "$source_dir/bin/"{rkmon,rkmon-display,mediamtx} /opt/rkmon/bin/
 install -m 644 "$source_dir/models/"{yolov8n.rknn,coco_80_labels_list.txt} /opt/rkmon/models/

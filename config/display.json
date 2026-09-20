@@ -2,5 +2,6 @@
   "timezone": "Asia/Shanghai",
   "font": "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
   "weather_cache": "/var/cache/rkmon-weather/weather.json",
+  "ads_root": "/userdata/rkmon-ads",
   "weather_interval_seconds": 900
 }

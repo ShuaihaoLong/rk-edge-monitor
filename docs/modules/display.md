@@ -32,10 +32,9 @@ SDL2、FreeType、json-c 和 GStreamer app/video 的开发文件；板端需要�
 MPP 插件和 Noto CJK 字体。构建仍使用 `script/build.sh` 和 Unix Makefiles。
 
 - `rkmon.ini`：复用 `[stream] url`、`[mqtt]` 和 `[stm32]`。
-- `display.json`：时区、中文字体路径、天气缓存位置和天气更新间隔。
+- `display.json`：时区、中文字体路径、天气缓存位置、天气更新间隔和广告目录。
 - `rkmon-display.service`：**系统服务**，以 elf 用户运行，使用 KMSDRM 直接输出并独占 DRM。
 - `rkmon-weather.service`：系统服务，以 elf 运行，缓存位于 `/var/cache/rkmon-weather/`。
-- GNOME autostart 桌面项：图形登录后启动用户显示服务。
 
 PC 更新统一使用 `bash script/deploy.sh`，包含显示程序、天气程序、配置、许可和服务。
 安装后系统服务立即启动显示，并停用 GDM，避免桌面合成器与 KMS 同时争用 DRM。
@@ -54,6 +53,14 @@ journalctl -u rkmon-weather -n 50
 临时退出全屏可按 Escape；手动停止使用 `systemctl stop rkmon-display`。
 需要恢复 Ubuntu 桌面时执行 `systemctl disable --now rkmon-display` 和 `systemctl enable --now gdm3`。
 不会影响主监控、网页或录像。
+
+## 广告播放
+
+广告视频通过网页的“广告管理”上传到 `/userdata/rkmon-ads/videos/`，后端使用独立
+SQLite 保存元数据和播放顺序。上传文件必须是 H.264 MP4，单文件最大 512 MiB。
+广告页面可以上移、下移和删除视频；首页按钮可以把本地屏幕切换为广告轮播或实时监控。
+默认模式为广告，没有可用广告时自动回退实时监控。API 位于 `/api/ads` 和
+`/api/display/mode`，只监听本机并由 Nginx 同源代理。
 
 ## 天气
 

@@ -84,4 +84,14 @@ class RecordingTests(unittest.TestCase):
         self.assertEqual(b-a,86400000)
         self.assertEqual(dt.datetime.fromtimestamp(a/1000,dt.timezone.utc).hour,16)
 
+    def test_ad_store_mode_and_playlist(self):
+        ads = module.AdStore(self.root / 'ads')
+        self.assertEqual(ads.mode(), 'ad')
+        self.assertEqual(ads.list(), [])
+        ads.set_mode('live')
+        self.assertEqual(ads.mode(), 'live')
+        ads.set_mode('ad')
+        with self.assertRaises(ValueError):
+            ads.set_mode('invalid')
+
 if __name__=='__main__':unittest.main()

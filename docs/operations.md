@@ -14,6 +14,9 @@ bash script/deploy.sh --host elf@192.168.100.11
 
 服务控制脚本随部署安装到 `/opt/rkmon/script/`，包括 `start.sh`、`start_all.sh`、`stop.sh` 和 `stop_all.sh`。
 
+广告管理页面为 `http://<board-ip>:9000/ads.html`。上传、排序和删除不会进入录像清理目录；
+显示模式通过首页的“播放广告/实时监控”按钮切换。
+
 ## 服务关系
 
 | 服务 | 作用 | 主要配置 |

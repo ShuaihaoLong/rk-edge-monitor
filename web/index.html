@@ -10,6 +10,7 @@
   <script defer src="player.js"></script>
   <script defer src="detections.js"></script>
   <script defer src="device-status.js"></script>
+  <script defer src="display-control.js"></script>
 </head>
 <body>
   <main>
@@ -27,7 +28,14 @@
       </section>
     </aside>
     <div class="monitor-area">
-      <nav aria-label="监控导航"><a href="recordings.html" style="color:#87d3ed">查看录像回放 →</a></nav>
+      <nav class="monitor-nav" aria-label="监控导航">
+        <span class="mode-switch" aria-label="本地屏幕显示模式">
+          <button type="button" data-display-mode="ad">播放广告</button>
+          <button type="button" data-display-mode="live">实时监控</button>
+        </span>
+        <a href="ads.html">广告管理 →</a>
+        <a href="recordings.html">录像回放 →</a>
+      </nav>
       <section id="viewport" aria-label="实时监控">
         <video id="monitor" autoplay muted playsinline aria-label="摄像头实时画面"></video>
         <canvas id="boxes" aria-hidden="true"></canvas>

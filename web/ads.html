@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>广告管理</title>
+  <link rel="stylesheet" href="ads.css">
+  <script defer src="ads.js"></script>
+</head>
+<body>
+  <main class="ads-shell">
+    <header class="page-header">
+      <div><p class="eyebrow">本地屏幕</p><h1>广告播放列表</h1><p class="hint">上传 H.264 MP4，按列表顺序循环播放。</p></div>
+      <a href="index.html">返回监控 →</a>
+    </header>
+    <section class="upload-panel" aria-label="上传广告">
+      <form id="upload-form">
+        <label for="video-file">选择广告视频</label>
+        <input id="video-file" name="video" type="file" accept="video/mp4,.mp4" required>
+        <button type="submit">上传视频</button>
+        <span id="upload-status" role="status"></span>
+      </form>
+    </section>
+    <section aria-label="广告列表">
+      <header class="list-header"><h2>播放顺序</h2><span id="display-mode"></span></header>
+      <ol id="ad-list"></ol>
+      <p id="empty" class="hint">还没有广告视频。</p>
+    </section>
+  </main>
+</body>
+</html>
