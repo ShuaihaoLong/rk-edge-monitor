@@ -67,10 +67,27 @@ display_uid=$(id -u elf)
 user_systemctl() {
     runuser -u elf -- env XDG_RUNTIME_DIR="/run/user/$display_uid" DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/$display_uid/bus" systemctl --user "$@"
 }
+configure_network_routes() {
+    command -v nmcli >/dev/null || { echo '提示：未找到 nmcli，跳过 Wi-Fi 路由优先级设置。' >&2; return; }
+    local uuid type
+    while IFS=: read -r uuid type; do
+        [[ -n $uuid ]] || continue
+        case "$type" in
+            802-11-wireless) nmcli connection modify uuid "$uuid" ipv4.route-metric 50 ipv6.route-metric 50 || echo "提示：无法修改 Wi-Fi 连接 $uuid，已跳过。" >&2 ;;
+            802-3-ethernet) nmcli connection modify uuid "$uuid" ipv4.route-metric 600 ipv6.route-metric 600 || echo "提示：无法修改有线连接 $uuid，已跳过。" >&2 ;;
+        esac
+    done < <(nmcli -t -f UUID,TYPE connection show)
+    while IFS=: read -r uuid device; do
+        [[ -n $uuid && -n $device ]] || continue
+        nmcli device reapply "$device" >/dev/null 2>&1 || true
+    done < <(nmcli -t -f UUID,DEVICE connection show --active)
+    echo '网络路由优先级已设置：Wi-Fi=50，有线=600。'
+}
 if [[ -S /run/user/$display_uid/bus ]]; then
     user_systemctl disable --now rkmon-display.service || true
 fi
 systemctl disable --now gdm3.service 2>/dev/null || true
+configure_network_routes
 systemctl stop rkmon-weather.service 2>/dev/null || true
 systemctl stop rkmon.service mediamtx.service rkmon-recording.service 2>/dev/null || true
 install -d -m 755 /opt/rkmon/lib/recording /opt/rkmon/lib/display /opt/rkmon/bin /opt/rkmon/config /opt/rkmon/web /opt/rkmon/models /opt/rkmon/licenses /opt/rkmon/script

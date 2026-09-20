@@ -212,6 +212,8 @@ int main(int argc, char** argv) {
         rkmon::display::VideoImage video;
         const auto start = Clock::now();
         auto first = start, last = start, next_clock = start;
+        auto next_frame = start;
+        constexpr auto frame_period = std::chrono::milliseconds(50);
         bool source_ad = false;
         unsigned frames = 0, stalls = 0;
         std::vector<double> render_ms, gaps_ms;
@@ -219,14 +221,20 @@ int main(int argc, char** argv) {
             SDL_Event e;
             while (SDL_PollEvent(&e))
                 if (e.type == SDL_QUIT || (e.type == SDL_KEYDOWN && e.key.keysym.sym == SDLK_ESCAPE)) stopping = 1;
-            const bool ad_mode = ad_reader.advertising();
-            if (ad_mode != source_ad) {
-                source_ad = ad_mode;
-                frames = 0;
-                stalls = 0;
-                first = last = Clock::now();
+            const auto loop_now = Clock::now();
+            bool has_video = false;
+            if (loop_now >= next_frame) {
+                const bool ad_mode = ad_reader.advertising();
+                if (ad_mode != source_ad) {
+                    source_ad = ad_mode;
+                    reader.set_enabled(!ad_mode);
+                    frames = 0;
+                    stalls = 0;
+                    first = last = loop_now;
+                }
+                has_video = source_ad ? ad_reader.take(video) : reader.take(video);
+                next_frame = loop_now + frame_period;
             }
-            const bool has_video = ad_mode ? ad_reader.take(video) : reader.take(video);
             if (has_video) {
                 const auto began = Clock::now();
                 pixels.swap(video.pixels);
@@ -275,7 +283,7 @@ int main(int argc, char** argv) {
             }
             lv_timer_handler();
             if (s.failed) throw std::runtime_error(SDL_GetError());
-            SDL_Delay(1);
+            SDL_Delay(5);
         }
         if (!capture.empty()) {
             auto* surface = SDL_CreateRGBSurfaceWithFormatFrom(s.pixels.data(), 1024, 600, 32, 4096, SDL_PIXELFORMAT_ARGB8888);

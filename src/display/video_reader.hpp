@@ -17,12 +17,14 @@ class VideoReader {
 public:
     explicit VideoReader(std::string url);
     ~VideoReader();
+    void set_enabled(bool enabled);
     bool take(VideoImage& frame);
     std::string status() const;
 private:
     void run() noexcept;
     std::string url_;
     std::atomic<bool> stop_{false};
+    std::atomic<bool> enabled_{true};
     mutable std::mutex mutex_;
     VideoImage latest_;
     std::string status_{"正在连接摄像头"};

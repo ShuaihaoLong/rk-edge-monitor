@@ -49,6 +49,9 @@ sudo bash script/stop_all.sh    # 停止全部后台服务，恢复 GDM 桌面
 
 `start_all.sh` 和 `stop_all.sh` 会改变本地显示模式；切换前应确保没有未保存的桌面操作。
 
+部署会通过 NetworkManager 将 Wi-Fi 路由 metric 设为 50、有线管理网设为 600，
+避免管理网成为公网天气请求的默认出口。
+
 录像状态接口会返回索引服务状态、最后扫描时间、最后事件时间和磁盘空间。录像服务由 `elf` 运行，MediaMTX 也以 `elf` 运行；录像目录需要该用户可写。
 
 ## 故障处理

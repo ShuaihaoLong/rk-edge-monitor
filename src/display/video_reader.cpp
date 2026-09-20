@@ -18,6 +18,7 @@ struct Pipeline {
 }
 VideoReader::VideoReader(std::string url) : url_(std::move(url)), thread_(&VideoReader::run, this) {}
 VideoReader::~VideoReader() { stop_ = true; if (thread_.joinable()) thread_.join(); }
+void VideoReader::set_enabled(bool enabled) { enabled_ = enabled; }
 bool VideoReader::take(VideoImage& frame) {
     std::lock_guard lock(mutex_);
     if (latest_.pixels.empty()) return false;
@@ -28,6 +29,12 @@ std::string VideoReader::status() const { std::lock_guard lock(mutex_); return s
 void VideoReader::run() noexcept {
     std::uint64_t sequence = 0;
     while (!stop_) {
+        if (!enabled_) {
+            std::lock_guard lock(mutex_);
+            latest_.pixels.clear();
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+            continue;
+        }
         try {
             Pipeline p;
             GError* error = nullptr;
@@ -43,7 +50,7 @@ void VideoReader::run() noexcept {
                 throw std::runtime_error("video startup failed");
             auto last = std::chrono::steady_clock::now();
             bool announced = false;
-            while (!stop_) {
+            while (!stop_ && enabled_) {
                 auto* sample = gst_app_sink_try_pull_sample(p.sink, 20 * GST_MSECOND);
                 if (sample) {
                     GstVideoInfo info{}; GstVideoFrame mapped{};
