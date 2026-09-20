@@ -94,7 +94,7 @@ void update_weather(const std::string& path, lv_obj_t* place, lv_obj_t* weather,
     lv_label_set_text_fmt(weather, "%.1f °C\n%s", temp, str("description", "").c_str());
     const auto elapsed = static_cast<long long>(std::time(nullptr) - updated);
     const bool cached = str("status", "offline") != "ok" || elapsed > 1800 || elapsed < -60;
-    lv_label_set_text_fmt(age, "%s\n%lld 分钟前更新", cached ? "离线 / 缓存" : "已更新", std::max(0LL, elapsed / 60));
+    lv_label_set_text_fmt(age, "%s · %lld分钟前更新", cached ? "离线/缓存" : "已更新", std::max(0LL, elapsed / 60));
 }
 
 }
@@ -179,19 +179,19 @@ int main(int argc, char** argv) {
         lv_obj_set_style_bg_color(lv_screen_active(), lv_color_hex(0x111b28), 0);
         auto* font = lv_freetype_font_create(font_path.c_str(), LV_FREETYPE_FONT_RENDER_MODE_BITMAP, 20, LV_FREETYPE_FONT_STYLE_NORMAL);
         if (!font) throw std::runtime_error("cannot load CJK font");
+        auto* compact_font = lv_freetype_font_create(font_path.c_str(), LV_FREETYPE_FONT_RENDER_MODE_BITMAP, 16, LV_FREETYPE_FONT_STYLE_NORMAL);
+        if (!compact_font) throw std::runtime_error("cannot load compact CJK font");
         label("本地监控", 24, 22, font);
         auto* clock = label("--:--:--", 790, 24, &lv_font_montserrat_32);
         auto* date = label("", 790, 72, font);
         auto* place = label("天气 · 合肥", 790, 125, font);
         auto* weather = label("等待联网", 790, 164, font);
-        auto* weather_age = label("", 790, 234, font);
+        auto* weather_age = label("", 790, 234, compact_font);
         lv_obj_set_width(place, 220); lv_label_set_long_mode(place, LV_LABEL_LONG_DOT);
         lv_obj_set_width(weather, 220); lv_obj_set_width(weather_age, 220);
-        label("STM32 环境传感器", 790, 314, font);
+        label("当前环境:", 790, 314, font);
         auto* temperature = label("温度  --", 790, 358, font);
         auto* humidity = label("湿度  --", 790, 401, font);
-        auto* sensor_status = label("等待数据", 790, 450, font);
-        lv_obj_set_width(sensor_status, 220);
         label("Open-Meteo / ipapi", 790, 560, &lv_font_montserrat_14);
         auto* stats = label("正在连接摄像头", 24, 548, font);
         auto* offline = label("视频连接中", 280, 282, font);
@@ -254,8 +254,7 @@ int main(int argc, char** argv) {
                     } else {
                         lv_label_set_text(temperature, "温度  --"); lv_label_set_text(humidity, "湿度  --");
                     }
-                    lv_label_set_text(sensor_status, sensor.message.c_str());
-                } else lv_label_set_text(sensor_status, "传感器未启用");
+                }
                 update_weather(weather_path, place, weather, weather_age);
                 next_clock = now + std::chrono::seconds(1);
             }
