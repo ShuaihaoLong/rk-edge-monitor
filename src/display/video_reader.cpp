@@ -1,7 +1,7 @@
+#include "rga_converter.hpp"
 #include "video_reader.hpp"
 #include <gst/app/gstappsink.h>
-#include <gst/video/video.h>
-#include <cstring>
+#include <memory>
 #include <iostream>
 #include <stdexcept>
 
@@ -12,8 +12,10 @@ struct Pipeline {
     GstAppSink* sink{};
 
     ~Pipeline() {
-        if (pipeline)
+        if (pipeline) {
             gst_element_set_state(pipeline, GST_STATE_NULL);
+            gst_element_get_state(pipeline, nullptr, nullptr, 2 * GST_SECOND);
+        }
         if (sink)
             gst_object_unref(sink);
         if (pipeline)
@@ -52,17 +54,21 @@ void VideoReader::run() noexcept {
     std::uint64_t sequence = 0;
     while (!stop_) {
         if (!enabled_) {
-            std::lock_guard lock(mutex_);
-            latest_.pixels.clear();
+            {
+                std::lock_guard lock(mutex_);
+                latest_.pixels.clear();
+            }
             std::this_thread::sleep_for(std::chrono::milliseconds(100));
             continue;
         }
         try {
+            RgaConverter converter;
             Pipeline p;
             GError* error = nullptr;
             p.pipeline = gst_parse_launch(
                 "rtspsrc name=source protocols=tcp latency=0 tcp-timeout=3000000 "
-                "! rtph264depay ! h264parse ! mppvideodec width=768 height=432 format=BGRA "
+                "! rtph264depay ! h264parse ! mppvideodec dma-feature=true arm-afbc=false "
+                "! video/x-raw(ANY),format=NV12 "
                 "! appsink name=frames sync=false max-buffers=1 drop=true wait-on-eos=false",
                 &error);
             if (error) {
@@ -83,29 +89,12 @@ void VideoReader::run() noexcept {
             while (!stop_ && enabled_) {
                 auto* sample = gst_app_sink_try_pull_sample(p.sink, 20 * GST_MSECOND);
                 if (sample) {
-                    GstVideoInfo info{};
-                    GstVideoFrame mapped{};
-                    if (!gst_video_info_from_caps(&info, gst_sample_get_caps(sample)) ||
-                        GST_VIDEO_INFO_WIDTH(&info) != 768 || GST_VIDEO_INFO_HEIGHT(&info) != 432 ||
-                        GST_VIDEO_INFO_FORMAT(&info) != GST_VIDEO_FORMAT_BGRA ||
-                        !gst_video_frame_map(&mapped, &info, gst_sample_get_buffer(sample),
-                                             GST_MAP_READ)) {
-                        gst_sample_unref(sample);
-                        throw std::runtime_error("unsupported video layout");
-                    }
-                    VideoImage next;
-                    next.pixels.resize(768 * 432 * 4);
+                    std::unique_ptr<GstSample, decltype(&gst_sample_unref)> owned(
+                        sample, gst_sample_unref);
+                    auto next = converter.convert(sample);
                     next.sequence = ++sequence;
-                    next.received = std::chrono::steady_clock::now();
-                    const auto* data =
-                        static_cast<const std::uint8_t*>(GST_VIDEO_FRAME_PLANE_DATA(&mapped, 0));
-                    for (int y = 0; y < 432; ++y)
-                        std::memcpy(next.pixels.data() + y * 768 * 4,
-                                    data + y * GST_VIDEO_FRAME_PLANE_STRIDE(&mapped, 0), 768 * 4);
-                    gst_video_frame_unmap(&mapped);
-                    gst_sample_unref(sample);
                     if (!announced) {
-                        std::cout << "[display/video] connected 768x432 BGRA" << std::endl;
+                        std::cout << "[display/video] connected 768x432 BGRA (MPP + RGA3)" << std::endl;
                         announced = true;
                     }
                     last = std::chrono::steady_clock::now();

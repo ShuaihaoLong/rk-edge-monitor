@@ -18,7 +18,7 @@ args=parser.parse_args()
 root=Path(tempfile.mkdtemp(prefix='rkmon-recording-test.'))
 print('test directory:',root,flush=True)
 config=root/'recording.ini';sock=root/'events.sock'
-config.write_text(f'[recording]\nroot={root}/video\nevent_socket={sock}\nport=19010\nreserve_mib=64\n')
+config.write_text(f'[recording]\nroot={root}/video\nevent_socket={sock}\nport=19010\nreserve_mib=64\nreserve_percent=0\n')
 media=root/'mediamtx.yml'
 notify=args.source/'src/recording/notify.py'
 media.write_text(f'''logLevel: warn

@@ -1,16 +1,18 @@
 #!/usr/bin/env bash
 # 用途：在 RK3588 上安装打包好的监控程序、网页和 systemd 服务。
 # 示例：sudo bash /tmp/rkmon-deploy/script/install-monitor.sh
-# 参数：--help 显示说明；无环境变量。固定运行用户 elf，安装目录 /opt/rkmon。
-# 前提：ARM64、Python3/SQLite、ffprobe、Nginx、Rockchip GStreamer/RKNN、SDL2/FreeType/json-c 和中文字体，以 root 运行；
+# 参数：--display-recording-only 仅更新显示和录像索引；--help 显示说明；无环境变量。运行用户 elf，安装目录 /opt/rkmon。
+# 前提：ARM64、Python3/SQLite、ffprobe、Nginx、Rockchip GStreamer/RKNN、librga、SDL2/FreeType/json-c 和中文字体，以 root 运行；
 #       包内含 bin/、config/、web/、models/、licenses/ 和 Mosquitto 软件包，无需联网。
 # 输出：/opt/rkmon；录像/SQLite 在 /userdata/rkmon-video（部署保留）；备份 /opt/rkmon-backup.*。
-# 副作用：更新服务及 9000 端口站点，启用开机启动并重启服务，停用 GDM 并独占 DRM 显示；不修改其他 Nginx 站点。
+# 副作用：完整更新重启服务并停用 GDM；局部更新只重启显示和录像索引，新清理策略可能删除旧录像，不改天气和网络。
 set -euo pipefail
 if [[ ${1:-} == --help || ${1:-} == -h ]]; then
     sed -n '2,8s/^# \{0,1\}//p' "${BASH_SOURCE[0]}"
     exit 0
 fi
+display_recording_only=false
+if [[ ${1:-} == --display-recording-only ]]; then display_recording_only=true; shift; fi
 [[ $# == 0 ]] || { echo '错误：不支持的参数' >&2; exit 2; }
 [[ $EUID == 0 && $(uname -m) == aarch64 ]] || { echo '错误：请在 ARM64 板卡上以 root 运行' >&2; exit 1; }
 source_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
@@ -53,6 +55,41 @@ fi
 if ldd "$source_dir/bin/rkmon" "$source_dir/bin/rkmon-display" | grep -q 'not found'; then
     echo '错误：rkmon 缺少动态库' >&2
     exit 1
+fi
+[[ -c /dev/rga && -c /dev/dma_heap/system-uncached-dma32 ]] || {
+    echo '错误：本地显示需要 RGA 和 DMA32 heap 设备' >&2; exit 1;
+}
+for element in mppvideodec appsink; do
+    gst-inspect-1.0 "$element" >/dev/null || { echo "错误：缺少 GStreamer 元件 $element" >&2; exit 1; }
+done
+if "$display_recording_only"; then
+    # 只覆盖本次修复涉及的运行文件，保留板端主程序参数和其他服务。
+    backup_dir=$(mktemp -d /opt/rkmon-display-recording-backup.XXXXXXXX)
+    for path in /opt/rkmon/bin/rkmon-display /opt/rkmon/lib/recording /opt/rkmon/config/recording.ini; do
+        cp -a --parents "$path" "$backup_dir/"
+    done
+    systemctl stop rkmon-display.service rkmon-recording.service
+    install -m 755 "$source_dir/bin/rkmon-display" /opt/rkmon/bin/
+    install -m 644 "$source_dir/lib/recording/"{service,notify}.py /opt/rkmon/lib/recording/
+    python3 - "$source_dir/config/recording.ini" /opt/rkmon/config/recording.ini <<'PY'
+import configparser
+import pathlib
+import sys
+
+defaults = configparser.ConfigParser()
+defaults.read(sys.argv[1])
+current = configparser.ConfigParser()
+path = pathlib.Path(sys.argv[2])
+if not current.read(path) or not current.has_section('recording'):
+    raise SystemExit('缺少板端录像配置，停止局部更新')
+current.set('recording', 'reserve_percent', defaults.get('recording', 'reserve_percent'))
+with path.open('w') as output:
+    current.write(output)
+PY
+    systemctl start rkmon-recording.service rkmon-display.service
+    systemctl is-active --quiet rkmon-recording.service rkmon-display.service
+    printf '局部安装完成；备份：%s\n' "$backup_dir"
+    exit 0
 fi
 backup_dir=$(mktemp -d /opt/rkmon-backup.XXXXXXXX)
 for path in /opt/rkmon /etc/nginx/sites-available/rkmon /etc/nginx/sites-enabled/rkmon /etc/mosquitto/conf.d/rkmon.conf /etc/systemd/system/rkmon.service /etc/systemd/system/mediamtx.service /etc/systemd/system/rkmon-recording.service /etc/systemd/system/rkmon-weather.service /etc/systemd/system/rkmon-display.service /home/elf/.config/systemd/user/rkmon-display.service /home/elf/.config/autostart/rkmon-display.desktop; do

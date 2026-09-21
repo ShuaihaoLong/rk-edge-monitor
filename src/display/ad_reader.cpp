@@ -1,10 +1,9 @@
+#include "rga_converter.hpp"
 #include "ad_reader.hpp"
 #include <gst/app/gstappsink.h>
-#include <gst/video/video.h>
 #include <json-c/json.h>
 #include <chrono>
 #include <algorithm>
-#include <cstring>
 #include <fstream>
 #include <iostream>
 #include <memory>
@@ -18,8 +17,10 @@ struct Pipeline {
     GstAppSink* sink{};
 
     ~Pipeline() {
-        if (pipeline)
+        if (pipeline) {
             gst_element_set_state(pipeline, GST_STATE_NULL);
+            gst_element_get_state(pipeline, nullptr, nullptr, 2 * GST_SECOND);
+        }
         if (sink)
             gst_object_unref(sink);
         if (pipeline)
@@ -28,7 +29,9 @@ struct Pipeline {
 };
 }
 
-AdReader::AdReader(std::string root) : root_(std::move(root)), thread_(&AdReader::run, this) {}
+AdReader::AdReader(std::string root)
+    : root_(std::move(root)), advertising_(mode() == "ad" && !playlist().empty()),
+      thread_(&AdReader::run, this) {}
 
 AdReader::~AdReader() {
     stop_ = true;
@@ -83,8 +86,10 @@ void AdReader::run() noexcept {
         const auto paths = playlist();
         if (mode() != "ad" || paths.empty()) {
             advertising_ = false;
-            std::lock_guard lock(mutex_);
-            latest_.pixels.clear();
+            {
+                std::lock_guard lock(mutex_);
+                latest_.pixels.clear();
+            }
             std::this_thread::sleep_for(std::chrono::milliseconds(250));
             continue;
         }
@@ -95,11 +100,13 @@ void AdReader::run() noexcept {
             index = 0;
         current_path = paths[index];
         try {
+            RgaConverter converter;
             Pipeline pipeline;
             GError* error = nullptr;
             pipeline.pipeline = gst_parse_launch(
                 "filesrc name=file ! qtdemux name=demux demux.video_0 ! h264parse "
-                "! mppvideodec width=768 height=432 format=BGRA "
+                "! mppvideodec dma-feature=true arm-afbc=false "
+                "! video/x-raw(ANY),format=NV12 "
                 "! appsink name=frames sync=true max-buffers=1 drop=true wait-on-eos=false",
                 &error);
             if (error) {
@@ -117,30 +124,21 @@ void AdReader::run() noexcept {
                 GST_STATE_CHANGE_FAILURE)
                 throw std::runtime_error("advertisement startup failed");
             bool ended = false;
+            bool announced = false;
+            auto last_frame = std::chrono::steady_clock::now();
             while (!stop_ && mode() == "ad") {
                 auto* sample = gst_app_sink_try_pull_sample(pipeline.sink, 50 * GST_MSECOND);
                 if (sample) {
-                    GstVideoInfo info{};
-                    GstVideoFrame mapped{};
-                    if (!gst_video_info_from_caps(&info, gst_sample_get_caps(sample)) ||
-                        GST_VIDEO_INFO_WIDTH(&info) != 768 || GST_VIDEO_INFO_HEIGHT(&info) != 432 ||
-                        GST_VIDEO_INFO_FORMAT(&info) != GST_VIDEO_FORMAT_BGRA ||
-                        !gst_video_frame_map(&mapped, &info, gst_sample_get_buffer(sample),
-                                             GST_MAP_READ)) {
-                        gst_sample_unref(sample);
-                        throw std::runtime_error("unsupported advertisement video layout");
-                    }
-                    VideoImage next;
-                    next.pixels.resize(768 * 432 * 4);
+                    std::unique_ptr<GstSample, decltype(&gst_sample_unref)> owned(
+                        sample, gst_sample_unref);
+                    auto next = converter.convert(sample);
                     next.sequence = ++sequence;
-                    next.received = std::chrono::steady_clock::now();
-                    const auto* data =
-                        static_cast<const std::uint8_t*>(GST_VIDEO_FRAME_PLANE_DATA(&mapped, 0));
-                    for (int y = 0; y < 432; ++y)
-                        std::memcpy(next.pixels.data() + y * 768 * 4,
-                                    data + y * GST_VIDEO_FRAME_PLANE_STRIDE(&mapped, 0), 768 * 4);
-                    gst_video_frame_unmap(&mapped);
-                    gst_sample_unref(sample);
+                    last_frame = next.received;
+                    if (!announced) {
+                        std::cout << "[display/ad] playing " << current_path << " 768x432 BGRA (MPP + RGA3)"
+                                  << std::endl;
+                        announced = true;
+                    }
                     std::lock_guard lock(mutex_);
                     latest_ = std::move(next);
                 }
@@ -150,14 +148,28 @@ void AdReader::run() noexcept {
                 gst_object_unref(bus);
                 if (message) {
                     ended = GST_MESSAGE_TYPE(message) == GST_MESSAGE_EOS;
+                    std::string reason;
+                    if (!ended) {
+                        GError* detail = nullptr;
+                        gchar* debug = nullptr;
+                        gst_message_parse_error(message, &detail, &debug);
+                        reason = detail ? detail->message : "advertisement pipeline error";
+                        g_clear_error(&detail);
+                        g_free(debug);
+                    }
                     gst_message_unref(message);
+                    if (!ended)
+                        throw std::runtime_error(reason);
                     break;
                 }
+                if (std::chrono::steady_clock::now() - last_frame > std::chrono::seconds(10))
+                    throw std::runtime_error("advertisement frame timeout");
             }
             if (ended)
                 index = (index + 1) % paths.size();
         } catch (const std::exception& error) {
             std::cerr << "[display/ad] " << error.what() << '\n';
+            index = (index + 1) % paths.size();
             std::this_thread::sleep_for(std::chrono::milliseconds(250));
         }
     }

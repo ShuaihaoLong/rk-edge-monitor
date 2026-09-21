@@ -7,14 +7,22 @@
 768×432（16:9），右侧显示北京时间、天气、STM32 温湿度及有效状态。
 
 ```text
-rkmon → MediaMTX 本机 RTSP → MPP 解码/缩放/转 BGRA → 最新 BGRA 帧 → LVGL → SDL2 → KMSDRM
+rkmon → MediaMTX 本机 RTSP → MPP 原尺寸 NV12 DMA-BUF → RGA3 缩放/转色 → 最新 BGRA 帧 → LVGL → SDL2 → KMSDRM
 STM32 → rkmon 串口模块 → MQTT → 本地屏幕
 ipapi / Open-Meteo → rkmon-weather → 原子替换 JSON 缓存 → 本地屏幕
 ```
 
-UI 不直接打开相机或串口。视频线程使用 MPP 直接输出 768×432 BGRA，appsink
-容量 1、丢旧帧，交接处只保留一帧。LVGL/SDL 操作都在主线程。
-该方案增加一次 H.264 解码和 RGB 拷贝，不宣称零拷贝或无额外延迟。
+UI 不直接打开相机或串口。实时监控和广告均由 MPP 硬件解码原始尺寸 NV12，
+通过 appsink 取出 DMA-BUF，由共享的 `RgaConverter` 使用 RGA3 缩放并转为 768×432 BGRA。
+不使用 CPU `videoscale` 或 `videoconvert`。appsink 容量 1、丢旧帧，线程交接也只保留最新一帧。
+LVGL/SDL 操作都在主线程，沿用 50 ms 的 UI 取帧周期（最多约 20 fps）；解码/转换线程可以处理 30 fps。
+
+转换器检查真实 DMA 内存、NV12 格式、plane offset、stride 和分配大小；
+厂商插件可能只协商普通 raw caps，因此 caps 接受 ANY memory feature，不能以 caps 字符串替代真实内存检查。
+源 fd 用 `importbuffer_fd` 导入，指定 RGA3 双核可调度集合，避免把高地址解码缓冲区送给 RGA2。
+整个同步任务保有 GstSample，完成后才归还解码池。输出复用 DMA32 缓冲区，
+按 BT.601/BT.709 和量程执行颜色转换；CPU 通过 DMA 同步读取结果并复制给 UI。
+这里仍有 BGRA 拷贝和 SDL 纹理上传，不是端到端零拷贝。关闭管线时先切换 NULL 并等待状态完成，再释放对象。
 
 视频超过 2 秒未刷新时隐藏旧画面并显示离线；后端错误或 10 秒无帧时重建连接。
 STM32 订阅主题来自 `rkmon.ini` 的 MQTT 配置，仅接受实时 telemetry，检查 schema、
@@ -28,8 +36,8 @@ STM32 订阅主题来自 `rkmon.ini` 的 MQTT 配置，仅接受实时 telemetry
 第三方依赖不提交到项目，LVGL MIT 许可随部署包安装。
 
 ARM64 构建默认启用 `RKMON_WITH_LOCAL_DISPLAY`，host 默认关闭。sysroot 需要
-SDL2、FreeType、json-c 和 GStreamer app/video 的开发文件；板端需要相应运行库、
-MPP 插件和 Noto CJK 字体。构建仍使用 `script/build.sh` 和 Unix Makefiles。
+SDL2、FreeType、json-c、librga 和 GStreamer app/video/allocators 的开发文件；板端需要相应运行库、
+MPP 插件、可访问的 `/dev/rga` 与 `/dev/dma_heap/system-uncached-dma32`，以及 Noto CJK 字体。构建仍使用 `script/build.sh` 和 Unix Makefiles。
 
 - `rkmon.ini`：复用 `[stream] url`、`[mqtt]` 和 `[stm32]`。
 - `display.json`：时区、中文字体路径、天气缓存位置、天气更新间隔和广告目录。
@@ -82,6 +90,16 @@ HTTP 限时和响应大小受限，网络访问独立于 UI；缓存通过同目
 `tests/display_data_tests.cpp` 覆盖 retained 数据拒绝、数值校验、时间过期、离线和重连状态。
 `tests/display_weather_tests.py` 使用本地假响应检查定位回退、失败缓存和原子写入。
 测试用假响应不进入正式代码。
+
+`rkmon_display_video_tests RTSP_URL ADS_ROOT SECONDS [both|live|ad]` 在板端检查 BT.601/BT.709 红色色块、带 padding 的 NV12 布局、实时视频与私有广告播放列表的取帧和关闭。验收输入为 30 fps，预热 3 秒后要求至少 27 fps 且帧间隔 P95 小于 100 ms，输出取帧线程 CPU 占用（不包含 UI）。广告目录应使用测试副本。MPP 库可能通过 syslog 写日志，不能只根据测试进程的 stdout/stderr 判断无硬件错误，还需检查 `journalctl -b _PID=<测试进程号>`。
+
+2026-09-21 在正式服务保持运行时额外启动取帧测试，110 秒双路测试中实时监控约 29.61 fps、广告 30 fps，
+两路测试进程 CPU 合计约 51.8%（单核为 100%，不含 LVGL/SDL），跨广告切换未发现 RGA 错误。
+另一次实时单路 10 秒测试约 29.60 fps、CPU 25.7%；BT.601/BT.709 色块和 padded stride 检查通过。
+这些是处理线程测试数据，不代表 MIPI 屏幕刷新率或完整显示进程的 CPU 占用；正式替换后还需实屏复核。
+
+完整广告结束和管线关闭时仍可能出现厂商 MPP 的 `mpp_frame_deinit` 警告。
+独立 `gst-launch-1.0` 原尺寸解码管线也可复现，切换 `fast-mode` 无效；该插件/Runtime 结束路径尚未修复，不能把出帧测试通过解释为完全无警告。
 
 当前软件计时只覆盖从 appsink/应用取帧到 SDL 提交；物理屏幕曝光至显示延迟、
 触摸准确度和小时级稳定性需单独测量。显示当前只用于信息展示，没有触摸控制操作。

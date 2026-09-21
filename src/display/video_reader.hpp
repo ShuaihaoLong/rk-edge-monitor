@@ -27,7 +27,7 @@ private:
     void run() noexcept;
     std::string url_;
     std::atomic<bool> stop_{false};
-    std::atomic<bool> enabled_{true};
+    std::atomic<bool> enabled_{false};
     mutable std::mutex mutex_;
     VideoImage latest_;
     std::string status_{"正在连接摄像头"};

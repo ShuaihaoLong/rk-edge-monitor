@@ -2,10 +2,10 @@
 # 用途：从 PC 一键构建、打包、上传并部署/更新板端监控服务。
 # 示例：bash script/deploy.sh；bash script/deploy.sh --host elf@192.168.100.11 --skip-build
 # 参数：--host SSH 目标（默认 elf@192.168.100.11）；--jobs 构建并行数（默认 4）；
-#       --archive MediaMTX 包路径；--skip-build 复用已有 ARM64 程序；--dry-run 仅显示计划；--help。
-# 前提：PC 有 Bash、SSH 密钥、交叉编译工具及已准备的媒体/AI/MQTT 包；板端有 Nginx、MPP/GStreamer、RKNN、SDL2/FreeType/json-c、中文字体、sudo。
+#       --archive MediaMTX 包路径；--skip-build 复用已有 ARM64 程序；--display-recording-only 仅更新显示和录像索引；--dry-run 仅显示计划；--help。
+# 前提：PC 有 Bash、SSH 密钥、交叉编译工具及已准备的媒体/AI/MQTT 包；板端有 Nginx、MPP/GStreamer、RKNN、librga、SDL2/FreeType/json-c、中文字体、sudo。
 # 输出：build/deploy/rkmon-deploy.tar.gz；板端 /opt/rkmon 和 /opt/rkmon-backup.*；无环境变量。
-# 副作用：短暂停流，覆盖程序、网页和项目配置，启用/重启服务；sudo 可能在终端询问密码，不保存密码。
+# 副作用：完整更新短暂停流并覆盖配置；局部更新只重启显示和录像索引，新清理策略可能删除旧录像；sudo 可能询问密码，不保存密码。
 set -euo pipefail
 script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 project_dir=$(cd -- "$script_dir/.." && pwd)
@@ -14,6 +14,7 @@ jobs=4
 archive=$project_dir/.local/downloads/mediamtx_v1.21.0_linux_arm64.tar.gz
 skip_build=false
 dry_run=false
+display_recording_only=false
 while (($#)); do
     case "$1" in
         --help|-h) sed -n '2,8s/^# \{0,1\}//p' "${BASH_SOURCE[0]}"; exit 0 ;;
@@ -22,6 +23,7 @@ while (($#)); do
             case "$1" in --host) host=$2;; --jobs) jobs=$2;; --archive) archive=$2;; esac
             shift 2 ;;
         --skip-build) skip_build=true; shift ;;
+        --display-recording-only) display_recording_only=true; shift ;;
         --dry-run) dry_run=true; shift ;;
         *) echo "错误：未知参数 $1" >&2; exit 2 ;;
     esac
@@ -32,6 +34,9 @@ if "$dry_run"; then
     printf '目标：%s\n跳过构建：%s\n并行数：%s\n安装包：%s\n' "$host" "$skip_build" "$jobs" "$archive"
     echo '流程：检查 SSH → 构建 → 校验并打包 → 上传独立临时目录 → sudo 安装并备份 → 检查服务和 HTTP → 清理临时目录'
     echo '更新会覆盖 config/ 中的项目配置；--host 只改变 SSH 目标，运行用户和 WebRTC 地址仍以配置文件为准。'
+    if "$display_recording_only"; then
+        echo '局部更新：仅替换显示程序、录像索引程序及录像配置；保持天气、网络、主程序配置和媒体服务不变。'
+    fi
     exit 0
 fi
 # 在耗时构建之前检查目标；不把密码写入命令、文件或日志。
@@ -52,7 +57,14 @@ cleanup() {
 trap cleanup EXIT
 ssh "${ssh_options[@]}" "$host" "tar -xzf - -C '$remote_dir'" < "$project_dir/build/deploy/rkmon-deploy.tar.gz"
 # 安装和清理放在同一条 sudo 会话中，避免 root 生成的 __pycache__ 留在上传目录。
-ssh -tt "${ssh_options[@]}" "$host" "sudo bash '$remote_dir/rkmon-deploy/script/install-monitor.sh'; install_status=\$?; sudo rm -rf -- '$remote_dir'; exit \$install_status"
+install_option=
+if "$display_recording_only"; then install_option=--display-recording-only; fi
+ssh -tt "${ssh_options[@]}" "$host" "sudo bash '$remote_dir/rkmon-deploy/script/install-monitor.sh' $install_option; install_status=\$?; sudo rm -rf -- '$remote_dir'; exit \$install_status"
 ssh "${ssh_options[@]}" "$host" 'sleep 3; systemctl is-active --quiet rkmon && systemctl is-active --quiet mediamtx && systemctl is-active --quiet rkmon-recording && systemctl is-active --quiet mosquitto && systemctl is-active --quiet nginx && curl --noproxy "*" --fail --silent --output /dev/null --max-time 5 http://127.0.0.1:9000/ && curl --noproxy "*" --fail --silent --output /dev/null --max-time 5 http://127.0.0.1:9000/api/recordings/status'
-ssh "${ssh_options[@]}" "$host" 'systemctl is-active --quiet rkmon-weather && systemctl is-active --quiet rkmon-display && ! systemctl is-active --quiet gdm3'
-echo '部署完成：监控、天气和本地屏幕服务运行，监控页面返回成功。'
+if "$display_recording_only"; then
+    ssh "${ssh_options[@]}" "$host" 'systemctl is-active --quiet rkmon-display'
+    echo '局部部署完成：显示和录像索引已更新，监控页面返回成功。'
+else
+    ssh "${ssh_options[@]}" "$host" 'systemctl is-active --quiet rkmon-weather && systemctl is-active --quiet rkmon-display && ! systemctl is-active --quiet gdm3'
+    echo '部署完成：监控、天气和本地屏幕服务运行，监控页面返回成功。'
+fi

@@ -54,7 +54,7 @@
 
 ## 录像配置
 
-录像索引服务使用 [config/recording.ini](../config/recording.ini)：`root` 为录像目录，`ads_root` 为独立广告目录，`event_socket` 为通知 Socket，`port` 为本机 API 端口，`timezone` 为显示时区，`retain_days` 为保留天数，`reserve_mib` 为磁盘保留空间，`max_gib=0` 表示不启用总容量上限。
+录像索引服务使用 [config/recording.ini](../config/recording.ini)：`root` 为录像目录，`ads_root` 为独立广告目录，`event_socket` 为通知 Socket，`port` 为本机 API 端口，`timezone` 为显示时区，`retain_days` 为保留天数，`reserve_mib` 为磁盘保留空间下限，`reserve_percent` 为分区总容量的最低空闲百分比（整数 0～99，默认 40），两种下限取较大值。清理另留 1% 总容量余量。`max_gib=0` 表示不启用录像总容量上限。
 
 ## 本地显示配置
 

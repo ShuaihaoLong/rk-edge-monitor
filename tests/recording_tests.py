@@ -15,7 +15,8 @@ class RecordingTests(unittest.TestCase):
     def setUp(self):
         self.temp=tempfile.TemporaryDirectory()
         self.root=Path(self.temp.name)
-        self.config=dict(root=self.root,timezone='Asia/Shanghai',days=7,reserve=64*1024**2,max_bytes=0)
+        self.config=dict(root=self.root,timezone='Asia/Shanghai',days=7,reserve=64*1024**2,
+                         reserve_percent=0,max_bytes=0)
         self.store=module.Store(self.config)
     def tearDown(self):
         self.temp.cleanup()
@@ -61,6 +62,52 @@ class RecordingTests(unittest.TestCase):
         folder=self.root/'camera'/'2026-01-01';folder.mkdir(parents=True)
         path=folder/'00-00-00-000000.mp4';path.symlink_to('/etc/passwd')
         with self.assertRaises(ValueError):self.store.safe_file(str(path))
+
+    def test_percent_reserve_deletes_oldest_until_headroom(self):
+        from collections import namedtuple
+        usage = namedtuple('usage', 'total used free')
+        self.config['reserve_percent'] = 40
+        older, newer = self.segment(age=300), self.segment(age=180)
+        with patch.object(module.subprocess, 'run', self.probe):
+            self.store.inspect(older, completed=True)
+            self.store.inspect(newer, completed=True)
+        gib = 1024**3
+        with patch.object(module.shutil, 'disk_usage', side_effect=[
+            usage(10*gib, 7*gib, 3*gib),
+            usage(10*gib, 5*gib, 5*gib),
+            usage(10*gib, 5*gib, 5*gib),
+        ]):
+            self.store.cleanup()
+        self.assertFalse(older.exists())
+        self.assertTrue(newer.exists())
+        self.assertEqual(self.store.reserved_bytes(10*gib), 4*gib)
+        self.config['reserve'] = 5*gib
+        self.assertEqual(self.store.reserved_bytes(10*gib), 5*gib)
+
+    def test_percent_reserve_preserves_active_and_reports_shortage(self):
+        from collections import namedtuple
+        usage = namedtuple('usage', 'total used free')
+        self.config['reserve_percent'] = 40
+        active = self.segment(age=10)
+        self.store.receive(dict(kind='segment_open', path=str(active)))
+        recent = self.segment(age=20)
+        with patch.object(module.subprocess, 'run', self.probe):
+            self.store.inspect(recent, completed=True)
+        with patch.object(module.shutil, 'disk_usage', return_value=usage(10*1024**3, 9*1024**3, 1024**3)):
+            with self.assertRaises(OSError):
+                self.store.cleanup()
+        self.assertTrue(active.exists())
+        self.assertTrue(recent.exists())
+
+    def test_percent_configuration(self):
+        path = self.root / 'recording.ini'
+        base = f'[recording]\nroot={self.root}\nevent_socket=/tmp/test-recording.sock\n'
+        path.write_text(base)
+        self.assertEqual(module.configuration(path)['reserve_percent'], 40)
+        for value in (-1, 100):
+            path.write_text(base + f'reserve_percent={value}\n')
+            with self.assertRaises(ValueError):
+                module.configuration(path)
     def test_aggregate_events_and_deduplicate(self):
         stamp=int(time.time()*1000)
         def event(revision,offset,objects):

@@ -40,6 +40,7 @@ def configuration(path):
         timezone=c.get('timezone', 'Asia/Shanghai'),
         days=c.getint('retain_days', 7),
         reserve=c.getint('reserve_mib', 1024) * 1024**2,
+        reserve_percent=c.getint('reserve_percent', 40),
         max_bytes=c.getint('max_gib', 0) * 1024**3,
         ads_root=Path(c.get('ads_root', '/userdata/rkmon-ads')).resolve(),
     )
@@ -47,6 +48,7 @@ def configuration(path):
         result['host'] != '127.0.0.1'
         or result['days'] < 1
         or result['reserve'] < 64 * 1024**2
+        or not 0 <= result['reserve_percent'] < 100
         or result['max_bytes'] < 0
     ):
         raise ValueError('invalid recording configuration')
@@ -301,18 +303,24 @@ class Store:
         self.cleanup()
         self.last_scan = time.time()
 
+    def reserved_bytes(self, total):
+        return max(self.config['reserve'], (total * self.config['reserve_percent'] + 99) // 100)
+
     def cleanup(self):
         cutoff = int((time.time() - self.config['days'] * 86400) * 1000)
         with self.lock, self.connect() as db:
             rows = list(db.execute("SELECT * FROM recordings ORDER BY start_ms"))
         total = sum(row['bytes'] for row in rows)
+        deleted = 0
         for row in rows:
             usage = shutil.disk_usage(self.root)
+            # 多清理 1% 总容量，给下次扫描前持续写入的录像留出余量。
+            target_free = self.reserved_bytes(usage.total) + usage.total // 100
             over = self.config['max_bytes'] and total > self.config['max_bytes']
             if row['status'] == 'writing' or (
                 row['status'] != 'deleting'
                 and row['start_ms'] >= cutoff
-                and usage.free >= self.config['reserve']
+                and usage.free >= target_free
                 and not over
             ):
                 continue
@@ -326,9 +334,15 @@ class Store:
             with self.lock, self.connect() as db:
                 db.execute('DELETE FROM recordings WHERE id=?', (row['id'],))
             total -= row['bytes']
+            deleted += 1
         with self.lock, self.connect() as db:
             db.execute('DELETE FROM events WHERE end_ms<?', (cutoff,))
-        if shutil.disk_usage(self.root).free < self.config['reserve']:
+        usage = shutil.disk_usage(self.root)
+        if deleted:
+            LOG.info(
+                'recording cleanup removed=%d free=%.1f%%', deleted, usage.free * 100 / usage.total
+            )
+        if usage.free < self.reserved_bytes(usage.total):
             raise OSError('录像磁盘剩余空间不足，已无可清理的旧分段')
 
     def run(self, ipc):
@@ -626,6 +640,8 @@ class Handler(BaseHTTPRequestHandler):
                     root=str(store.root),
                     free_bytes=usage.free,
                     total_bytes=usage.total,
+                    reserve_bytes=store.reserved_bytes(usage.total),
+                    reserve_percent=store.config['reserve_percent'],
                     last_scan=store.last_scan,
                     last_event=store.last_event,
                 )

@@ -8,9 +8,12 @@ PC 端统一入口是 `script/deploy.sh`：检查 SSH 和板端依赖，构建�
 bash script/deploy.sh --dry-run
 bash script/deploy.sh --skip-build
 bash script/deploy.sh --host elf@192.168.100.11
+bash script/deploy.sh --skip-build --display-recording-only
 ```
 
 部署包由 `script/package-monitor.sh` 复制 C++ 二进制、MediaMTX、Python 录像服务、网页、配置、systemd 文件和离线 deb 包。板端安装到 `/opt/rkmon`；录像和 SQLite 保留在 `/userdata/rkmon-video`，升级不会覆盖录像目录。
+
+`--display-recording-only` 复用同一构建/打包/安装链路，只更新显示程序、录像索引程序及 `reserve_percent` 配置，并重启这两个服务；保留板端其他录像参数、主程序 AI/码率配置、天气和网络设置，不重启采集及 MediaMTX。回滚文件保存在 `/opt/rkmon-display-recording-backup.*`。新空间策略会按需删除最旧的已完成录像，直至达到空闲目标。
 
 服务控制脚本随部署安装到 `/opt/rkmon/script/`，包括 `start.sh`、`start_all.sh`、`stop.sh` 和 `stop_all.sh`。
 

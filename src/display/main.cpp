@@ -295,9 +295,9 @@ int main(int argc, char** argv) {
             bool has_video = false;
             if (loop_now >= next_frame) {
                 const bool ad_mode = ad_reader.advertising();
+                reader.set_enabled(!ad_mode);
                 if (ad_mode != source_ad) {
                     source_ad = ad_mode;
-                    reader.set_enabled(!ad_mode);
                     frames = 0;
                     stalls = 0;
                     first = last = loop_now;
